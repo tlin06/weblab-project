@@ -24,8 +24,11 @@ const Project = () => {
   const [isEditingPurpose, setIsEditingPurpose] = useState(false);
   const [saveError, setSaveError] = useState("");
   const notesSaveTimer = useRef(null);
+  const [selectedTabKey, setSelectedTabKey] = useState(null);
+  const [activeDetail, setActiveDetail] = useState("resource");
   const [tabDraft, setTabDraft] = useState({ title: "", url: "" });
-  const [tabError, setTabError] = useState("");
+  const [isEditingTabTitle, setIsEditingTabTitle] = useState(false);
+  const [isEditingTabUrl, setIsEditingTabUrl] = useState(false);
 
   useEffect(() => {
     if (!authReady) return;
@@ -52,8 +55,16 @@ const Project = () => {
       setIsEditingProject(false);
       if (data.resources && data.resources.length > 0) {
         setSelectedResourceId(String(data.resources[0]._id));
+        setActiveDetail("resource");
       } else {
         setSelectedResourceId(null);
+      }
+      const firstTab = (data.tabGroups || [])[0]?.links?.[0];
+      if (firstTab) {
+        const key = firstTab._id ? String(firstTab._id) : "idx:0";
+        setSelectedTabKey(key);
+      } else {
+        setSelectedTabKey(null);
       }
     });
   }, [projectId, user, authReady]);
@@ -98,6 +109,28 @@ const Project = () => {
       setSaveError("");
     }
   }, [selectedResource]);
+
+  const tabGroup = project?.tabGroups?.[0] || null;
+  const tabs = tabGroup?.links || [];
+  const selectedTab = useMemo(() => {
+    if (!selectedTabKey) return null;
+    if (selectedTabKey.startsWith("idx:")) {
+      const idx = Number(selectedTabKey.replace("idx:", ""));
+      return Number.isInteger(idx) ? tabs[idx] || null : null;
+    }
+    return tabs.find((link) => String(link._id) === String(selectedTabKey)) || null;
+  }, [tabs, selectedTabKey]);
+
+  useEffect(() => {
+    if (selectedTab) {
+      setTabDraft({
+        title: selectedTab.title || "",
+        url: selectedTab.url || "",
+      });
+      setIsEditingTabTitle(false);
+      setIsEditingTabUrl(false);
+    }
+  }, [selectedTab]);
 
   useEffect(() => {
     return () => {
@@ -145,20 +178,16 @@ const Project = () => {
 
   const handleAddTab = () => {
     if (!project) return;
-    const title = tabDraft.title.trim();
-    const url = tabDraft.url.trim();
-    if (!title || !url) {
-      setTabError("Add a title and a URL first.");
-      return;
-    }
-    setTabError("");
     const existingGroup = (project.tabGroups || [])[0];
     const ensureGroup = existingGroup
       ? Promise.resolve(existingGroup)
       : post(`/api/projects/${projectId}/tabgroups`, { title: "Tabs" });
 
     ensureGroup.then((tabGroup) => {
-      post(`/api/tabgroups/${tabGroup._id}/links`, { title, url }).then((updated) => {
+      post(`/api/tabgroups/${tabGroup._id}/links`, {
+        title: "New Tab",
+        url: "https://",
+      }).then((updated) => {
         setProject((prev) => {
           const currentGroups = prev?.tabGroups || [];
           const hasGroup = currentGroups.some((group) => group._id === updated._id);
@@ -170,17 +199,53 @@ const Project = () => {
             tabGroups: nextGroups,
           };
         });
-        setTabDraft({ title: "", url: "" });
+        const newLink = updated.links?.[updated.links.length - 1];
+        if (newLink?._id) {
+          setSelectedTabKey(String(newLink._id));
+          setActiveDetail("tab");
+        }
       });
+    });
+  };
+
+  const saveTab = (updates) => {
+    if (!tabGroup?._id || !selectedTabKey) return Promise.resolve();
+    const isIndexKey = selectedTabKey.startsWith("idx:");
+    const endpoint = isIndexKey
+      ? `/api/tabgroups/${tabGroup._id}/links/index/${selectedTabKey.replace("idx:", "")}`
+      : `/api/tabgroups/${tabGroup._id}/links/${selectedTabKey}`;
+    return post(endpoint, updates).then((updated) => {
+      setProject((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          tabGroups: (prev.tabGroups || []).map((group) =>
+            group._id === updated._id ? updated : group
+          ),
+        };
+      });
+      return updated;
     });
   };
 
   const handleOpenAllTabs = (tabGroup) => {
     (tabGroup.links || []).forEach((link) => {
       if (link.url) {
-        window.open(link.url, "_blank", "noopener,noreferrer");
+        const normalized = normalizeUrl(link.url);
+        if (normalized) {
+          window.open(normalized, "_blank", "noopener,noreferrer");
+        }
       }
     });
+  };
+
+  const normalizeUrl = (rawUrl) => {
+    const trimmed = (rawUrl || "").trim();
+    if (!trimmed) return "";
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      return trimmed;
+    }
+    return `https://${trimmed}`;
   };
 
   return (
@@ -326,8 +391,11 @@ const Project = () => {
                       className={`resource-item ${
                         resource._id === selectedResourceId ? "active" : ""
                       }`}
-                      onClick={() => setSelectedResourceId(resource._id)}
-                    >
+                    onClick={() => {
+                      setSelectedResourceId(resource._id);
+                      setActiveDetail("resource");
+                    }}
+                  >
                       <div className="resource-title">{resource.title}</div>
                       {resource.purpose && (
                         <div className="resource-description">{resource.purpose}</div>
@@ -346,67 +414,63 @@ const Project = () => {
                   + Add Tab
                 </button>
               </div>
-              {tabError && <div className="empty-state">{tabError}</div>}
-              <div className="field">
-                <label>Tab title</label>
-                <input
-                  value={tabDraft.title}
-                  onChange={(e) =>
-                    setTabDraft((prev) => ({ ...prev, title: e.target.value }))
-                  }
-                  placeholder="New tab title"
-                />
-              </div>
-              <div className="field">
-                <label>Tab URL</label>
-                <input
-                  value={tabDraft.url}
-                  onChange={(e) => setTabDraft((prev) => ({ ...prev, url: e.target.value }))}
-                  placeholder="https://"
-                />
-              </div>
-              {(() => {
-                const links = (project?.tabGroups || []).flatMap(
-                  (group) => group.links || []
-                );
-                if (links.length === 0) {
-                  return <div className="empty-state">No tabs yet.</div>;
-                }
-                return (
-                  <>
-                    <div className="tab-list">
-                      {links.map((link, idx) => (
-                        <div className="tab-link" key={`${link.title}-${idx}`}>
-                          <span>{link.title}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="tab-actions">
-                      <button
-                        className="button ghost"
-                        type="button"
-                        onClick={() =>
-                          handleOpenAllTabs({
-                            links,
-                          })
-                        }
+              {tabs.length === 0 ? (
+                <div className="empty-state">No tabs yet.</div>
+              ) : (
+                <>
+                  <div className="tab-list">
+                    {tabs.map((link, idx) => (
+                      <div
+                        key={link._id || link.title}
+                        className={`resource-item ${
+                          (link._id
+                            ? String(link._id) === String(selectedTabKey)
+                            : `idx:${idx}` === String(selectedTabKey))
+                            ? "active"
+                            : ""
+                        }`}
+                        onClick={() => {
+                          const key = link._id ? String(link._id) : `idx:${idx}`;
+                          setSelectedTabKey(key);
+                          setActiveDetail("tab");
+                        }}
                       >
-                        Open All Tabs
-                      </button>
-                    </div>
-                  </>
-                );
-              })()}
-              </div>
+                        <div className="resource-title">{link.title}</div>
+                        {link.url && <div className="resource-description">{link.url}</div>}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="tab-actions">
+                    <button
+                      className="button ghost"
+                      type="button"
+                      onClick={() =>
+                        handleOpenAllTabs({
+                          links: tabs,
+                        })
+                      }
+                    >
+                      Open All Tabs
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
             </section>
 
             <section className="panel">
               <div className="panel-header">
-                <div className="panel-title">Resource Details</div>
+                <div className="panel-title">
+                  {activeDetail === "tab" ? "Tab Details" : "Resource Details"}
+                </div>
               </div>
-              {saveError && <div className="empty-state">{saveError}</div>}
-              {!selectedResource && <div className="empty-state">Select a resource.</div>}
-              {selectedResource && (
+              {saveError && activeDetail === "resource" && (
+                <div className="empty-state">{saveError}</div>
+              )}
+              {activeDetail === "resource" && !selectedResource && (
+                <div className="empty-state">Select a resource.</div>
+              )}
+              {activeDetail === "resource" && selectedResource && (
                 <>
                   <div className="field">
                     <div className="field-header">
@@ -491,8 +555,9 @@ const Project = () => {
                       className="button"
                       type="button"
                       onClick={() => {
-                        if (resourceDraft.url) {
-                          window.open(resourceDraft.url, "_blank", "noopener,noreferrer");
+                        const urlToOpen = normalizeUrl(resourceDraft.url);
+                        if (urlToOpen) {
+                          window.open(urlToOpen, "_blank", "noopener,noreferrer");
                         }
                       }}
                     >
@@ -504,6 +569,76 @@ const Project = () => {
                       onClick={() => window.alert("Reminder feature coming soon.")}
                     >
                       Set Reminder
+                    </button>
+                  </div>
+                </>
+              )}
+              {activeDetail === "tab" && !selectedTab && (
+                <div className="empty-state">Select a tab.</div>
+              )}
+              {activeDetail === "tab" && selectedTab && (
+                <>
+                  <div className="field">
+                    <div className="field-header">
+                      <label>Title</label>
+                      <button
+                        className="button ghost small"
+                        type="button"
+                        onClick={() => {
+                          if (isEditingTabTitle) {
+                            saveTab({ title: tabDraft.title });
+                          }
+                          setIsEditingTabTitle((prev) => !prev);
+                        }}
+                      >
+                        {isEditingTabTitle ? "Done" : "Edit"}
+                      </button>
+                    </div>
+                    <input
+                      value={tabDraft.title}
+                      disabled={!isEditingTabTitle}
+                      onChange={(e) =>
+                        setTabDraft((prev) => ({ ...prev, title: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="field">
+                    <div className="field-header">
+                      <label>Link URL</label>
+                      <button
+                        className="button ghost small"
+                        type="button"
+                        onClick={() => {
+                          if (isEditingTabUrl) {
+                            saveTab({ url: tabDraft.url });
+                          }
+                          setIsEditingTabUrl((prev) => !prev);
+                        }}
+                      >
+                        {isEditingTabUrl ? "Done" : "Edit"}
+                      </button>
+                    </div>
+                    <input
+                      value={tabDraft.url}
+                      disabled={!isEditingTabUrl}
+                      onChange={(e) =>
+                        setTabDraft((prev) => ({ ...prev, url: e.target.value }))
+                      }
+                      placeholder="https://"
+                    />
+                  </div>
+                  <div className="actions-row">
+                    <button
+                      className="button"
+                      type="button"
+                      onClick={() => {
+                        const urlToOpen = normalizeUrl(tabDraft.url || selectedTab?.url);
+                        if (urlToOpen) {
+                          window.open(urlToOpen, "_blank", "noopener,noreferrer");
+                        }
+                      }}
+                    >
+                      Open Link
                     </button>
                   </div>
                 </>

@@ -255,6 +255,81 @@ router.post("/tabgroups/:tabGroupId/links", auth.ensureLoggedIn, (req, res) => {
     .catch(() => res.status(404).send({ msg: "Tab group not found" }));
 });
 
+router.post("/tabgroups/:tabGroupId/links/:linkId", auth.ensureLoggedIn, (req, res) => {
+  TabGroup.findById(req.params.tabGroupId)
+    .then((tabGroup) => {
+      if (!tabGroup) {
+        return res.status(404).send({ msg: "Tab group not found" });
+      }
+
+      return Project.findOne({
+        _id: tabGroup.projectId,
+        creator: req.user._id,
+      }).then((project) => {
+        if (!project) {
+          return res.status(404).send({ msg: "Project not found" });
+        }
+
+        const updates = {};
+        if (req.body.title !== undefined) updates["links.$.title"] = req.body.title;
+        if (req.body.url !== undefined) updates["links.$.url"] = req.body.url;
+        if (req.body.description !== undefined)
+          updates["links.$.description"] = req.body.description;
+
+        return TabGroup.findOneAndUpdate(
+          { _id: req.params.tabGroupId, "links._id": req.params.linkId },
+          { $set: updates },
+          { new: true }
+        ).then((updated) => res.send(updated));
+      });
+    })
+    .catch(() => res.status(404).send({ msg: "Tab group not found" }));
+});
+
+router.post(
+  "/tabgroups/:tabGroupId/links/index/:linkIndex",
+  auth.ensureLoggedIn,
+  (req, res) => {
+    const index = Number(req.params.linkIndex);
+    if (!Number.isInteger(index) || index < 0) {
+      return res.status(400).send({ msg: "Invalid tab index" });
+    }
+
+    TabGroup.findById(req.params.tabGroupId)
+      .then((tabGroup) => {
+        if (!tabGroup) {
+          return res.status(404).send({ msg: "Tab group not found" });
+        }
+
+        if (!tabGroup.links || index >= tabGroup.links.length) {
+          return res.status(404).send({ msg: "Tab not found" });
+        }
+
+        return Project.findOne({
+          _id: tabGroup.projectId,
+          creator: req.user._id,
+        }).then((project) => {
+          if (!project) {
+            return res.status(404).send({ msg: "Project not found" });
+          }
+
+          const updates = {};
+          if (req.body.title !== undefined) updates[`links.${index}.title`] = req.body.title;
+          if (req.body.url !== undefined) updates[`links.${index}.url`] = req.body.url;
+          if (req.body.description !== undefined)
+            updates[`links.${index}.description`] = req.body.description;
+
+          return TabGroup.findByIdAndUpdate(
+            req.params.tabGroupId,
+            { $set: updates },
+            { new: true }
+          ).then((updated) => res.send(updated));
+        });
+      })
+      .catch(() => res.status(404).send({ msg: "Tab group not found" }));
+  }
+);
+
 // anything else falls to this "not found" case
 router.all("*", (req, res) => {
   console.log(`API route not found: ${req.method} ${req.url}`);

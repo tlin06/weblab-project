@@ -277,7 +277,7 @@ body {
 }
 
 .resource-list {
-  max-height: 280px;
+  max-height: 360px;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -351,7 +351,7 @@ body {
 }
 
 .tab-list {
-  max-height: 220px;
+  max-height: 180px;
   overflow-y: auto;
   padding-right: 4px;
 }
