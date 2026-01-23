@@ -14,7 +14,9 @@ const Brand = ({ subtitle }) => {
         if (e.key === "Enter") navigate("/");
       }}
     >
-      <div className="brand-mark">LT</div>
+      <div className="brand-mark">
+        <img src="/link_logo.svg" alt="LinkTracker logo" className="brand-logo" />
+      </div>
       <div>
         <div className="brand-title">LinkTracker</div>
         <div className="sidebar-reminder">{subtitle}</div>
