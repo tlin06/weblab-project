@@ -71,7 +71,7 @@ const Home = () => {
         </div>
       </aside>
 
-      <main className="main">
+      <main className="main main-scroll">
         <header className="topbar">
           <div>
             <div className="topbar-title">Projects</div>
@@ -119,30 +119,32 @@ const Home = () => {
           </div>
         </section>
 
-        <section className="grid">
-          {!user && <div className="empty-state">Sign in to see your projects.</div>}
-          {user && projects.length === 0 && (
-            <div className="empty-state">No projects yet. Create one above.</div>
-          )}
-          {user &&
-            projects.map((project) => (
-              <div
-                key={project._id}
-                className="card"
-                role="button"
-                tabIndex={0}
-                onClick={() => navigate(`/project/${project._id}`)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") navigate(`/project/${project._id}`);
-                }}
-              >
-                <div className="card-title">{project.title}</div>
-                <div className="card-description">
-                  {project.description || "No description yet."}
+        <div className="grid-scroll">
+          <section className="grid">
+            {!user && <div className="empty-state">Sign in to see your projects.</div>}
+            {user && projects.length === 0 && (
+              <div className="empty-state">No projects yet. Create one above.</div>
+            )}
+            {user &&
+              projects.map((project) => (
+                <div
+                  key={project._id}
+                  className="card"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(`/project/${project._id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") navigate(`/project/${project._id}`);
+                  }}
+                >
+                  <div className="card-title">{project.title}</div>
+                  <div className="card-description">
+                    {project.description || "No description yet."}
+                  </div>
                 </div>
-              </div>
-            ))}
-        </section>
+              ))}
+          </section>
+        </div>
       </main>
     </div>
   );

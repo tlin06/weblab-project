@@ -43,6 +43,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  overflow-y: auto;
 }
 
 .brand {
@@ -113,7 +114,11 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  overflow-y: auto;
+  min-height: 0;
+}
+
+.main-scroll {
+  overflow: hidden;
 }
 
 .topbar {
@@ -213,6 +218,12 @@ body {
   padding: 16px 18px;
 }
 
+.grid-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .card {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -223,6 +234,7 @@ body {
   gap: 6px;
   box-shadow: var(--shadow);
 }
+
 
 .card-title {
   font-weight: 900;

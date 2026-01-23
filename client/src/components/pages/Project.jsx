@@ -8,6 +8,7 @@ import LabeledInput from "../modules/LabeledInput";
 import ResourcePanel from "../modules/ResourcePanel";
 import TabPanel from "../modules/TabPanel";
 import AuthControls from "../modules/AuthControls";
+import ConfirmModal from "../modules/ConfirmModal";
 
 const Project = () => {
   const { projectId } = useParams();
@@ -384,34 +385,16 @@ const Project = () => {
 
   return (
     <div className="layout">
-      {confirmState && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <div className="modal-title">Confirm</div>
-            <div className="modal-body">{confirmState.message}</div>
-            <div className="modal-actions">
-              <button
-                className="button ghost"
-                type="button"
-                onClick={() => setConfirmState(null)}
-              >
-                Cancel
-              </button>
-              <button
-                className="button"
-                type="button"
-                onClick={() => {
-                  const action = confirmState.onConfirm;
-                  setConfirmState(null);
-                  action();
-                }}
-              >
-                OK
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        isOpen={Boolean(confirmState)}
+        message={confirmState?.message}
+        onCancel={() => setConfirmState(null)}
+        onConfirm={() => {
+          const action = confirmState?.onConfirm;
+          setConfirmState(null);
+          if (action) action();
+        }}
+      />
       <aside className="sidebar">
         <Brand subtitle="Project view" />
 
