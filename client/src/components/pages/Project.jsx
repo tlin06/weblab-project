@@ -1,14 +1,18 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { GoogleLogin, googleLogout } from "@react-oauth/google";
-
 import { get, post } from "../../utilities";
 import { UserContext } from "../App";
+import Brand from "../modules/Brand";
+import SearchBar from "../modules/SearchBar";
+import LabeledInput from "../modules/LabeledInput";
+import ResourcePanel from "../modules/ResourcePanel";
+import TabPanel from "../modules/TabPanel";
+import AuthControls from "../modules/AuthControls";
 
 const Project = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const { user, authReady, handleLogin, handleLogout } = useContext(UserContext);
+  const { user, authReady } = useContext(UserContext);
   const [projects, setProjects] = useState([]);
   const [project, setProject] = useState(null);
   const [projectDraft, setProjectDraft] = useState({ title: "", description: "" });
@@ -136,6 +140,7 @@ const Project = () => {
 
   const tabGroup = project?.tabGroups?.[0] || null;
   const tabs = tabGroup?.links || [];
+  const getTabKey = (link, idx) => (link._id ? String(link._id) : `idx:${idx}`);
   const selectedTab = useMemo(() => {
     if (!selectedTabKey) return null;
     if (selectedTabKey.startsWith("idx:")) {
@@ -408,21 +413,7 @@ const Project = () => {
         </div>
       )}
       <aside className="sidebar">
-        <div
-          className="brand"
-          role="button"
-          tabIndex={0}
-          onClick={() => navigate("/")}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") navigate("/");
-          }}
-        >
-          <div className="brand-mark">LT</div>
-          <div>
-            <div className="brand-title">LinkTracker</div>
-            <div className="sidebar-reminder">Project view</div>
-          </div>
-        </div>
+        <Brand subtitle="Project view" />
 
         <div>
           <div className="section-title">Projects</div>
@@ -505,30 +496,8 @@ const Project = () => {
                 </button>
               </>
             )}
-            <div className="search-bar" onClick={() => navigate("/search")}>
-              Search (shell only)
-            </div>
-            {user ? (
-              <div className="auth-chip">
-                <span className="auth-name">{user.name}</span>
-                <button
-                  className="button ghost"
-                  type="button"
-                  onClick={() => {
-                    googleLogout();
-                    handleLogout();
-                  }}
-                >
-                  Sign out
-                </button>
-              </div>
-            ) : (
-              <GoogleLogin
-                onSuccess={handleLogin}
-                onError={(err) => console.log(err)}
-                useOneTap
-              />
-            )}
+            <SearchBar />
+            <AuthControls />
           </div>
         </header>
 
@@ -539,88 +508,34 @@ const Project = () => {
         ) : (
           <div className="content-columns">
             <section className="panel">
-              <div className="panel-header">
-                <div className="panel-title">Resources</div>
-                <button className="button ghost" type="button" onClick={handleAddResource}>
-                  + Add Resource
-                </button>
-              </div>
-              <div className="resource-list">
-                {project?.resources?.length ? (
-                  project.resources.map((resource) => (
-                    <div
-                      key={resource._id}
-                      className={`resource-item ${
-                        activeDetail === "resource" && resource._id === selectedResourceId
-                          ? "active"
-                          : ""
-                      }`}
-                    onClick={() => {
-                      setSelectedResourceId(resource._id);
-                      setActiveDetail("resource");
-                    }}
-                  >
-                      <div className="resource-title">{resource.title}</div>
-                      {resource.purpose && (
-                        <div className="resource-description">{resource.purpose}</div>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <div className="empty-state">No resources yet.</div>
-                )}
-              </div>
+              <ResourcePanel
+                resources={project?.resources || []}
+                selectedResourceId={selectedResourceId}
+                activeDetail={activeDetail}
+                onAddResource={handleAddResource}
+                onSelectResource={(id) => {
+                  setSelectedResourceId(id);
+                  setActiveDetail("resource");
+                }}
+              />
 
-            <div className="tabgroup">
-              <div className="panel-header">
-                <div className="panel-title">Tabs</div>
-                <button className="button ghost" type="button" onClick={handleAddTab}>
-                  + Add Tab
-                </button>
-              </div>
-              {tabs.length === 0 ? (
-                <div className="empty-state">No tabs yet.</div>
-              ) : (
-                <>
-                  <div className="tab-list">
-                    {tabs.map((link, idx) => (
-                      <div
-                        key={link._id || link.title}
-                        className={`resource-item ${
-                          activeDetail === "tab" &&
-                          (link._id
-                            ? String(link._id) === String(selectedTabKey)
-                            : `idx:${idx}` === String(selectedTabKey))
-                            ? "active"
-                            : ""
-                        }`}
-                        onClick={() => {
-                          const key = link._id ? String(link._id) : `idx:${idx}`;
-                          setSelectedTabKey(key);
-                          setActiveDetail("tab");
-                        }}
-                      >
-                        <div className="resource-title">{link.title}</div>
-                        {link.url && <div className="resource-description">{link.url}</div>}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="tab-actions">
-                    <button
-                      className="button ghost"
-                      type="button"
-                      onClick={() =>
-                        handleOpenAllTabs({
-                          links: tabs,
-                        })
-                      }
-                    >
-                      Open All Tabs
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+              <TabPanel
+                tabs={tabs}
+                selectedTabKey={selectedTabKey}
+                activeDetail={activeDetail}
+                getTabKey={getTabKey}
+                onAddTab={handleAddTab}
+                onSelectTab={(link, idx) => {
+                  const key = getTabKey(link, idx);
+                  setSelectedTabKey(key);
+                  setActiveDetail("tab");
+                }}
+                onOpenAllTabs={() =>
+                  handleOpenAllTabs({
+                    links: tabs,
+                  })
+                }
+              />
             </section>
 
             <section className="panel">
@@ -653,40 +568,36 @@ const Project = () => {
               )}
               {activeDetail === "resource" && selectedResource && (
                 <>
-                  <div className="field">
-                    <label>Title</label>
-                    <input
-                      value={resourceDraft.title}
-                      onChange={(e) => {
-                        const nextTitle = e.target.value;
-                        setResourceDraft((prev) => ({ ...prev, title: nextTitle }));
-                        if (resourceSaveTimers.current.title) {
-                          clearTimeout(resourceSaveTimers.current.title);
-                        }
-                        markResourceSaving();
-                        resourceSaveTimers.current.title = setTimeout(() => {
-                          saveResource({ title: nextTitle });
-                        }, 500);
-                      }}
-                    />
-                  </div>
-                  <div className="field">
-                    <label>Purpose</label>
-                    <input
-                      value={resourceDraft.purpose}
-                      onChange={(e) => {
-                        const nextPurpose = e.target.value;
-                        setResourceDraft((prev) => ({ ...prev, purpose: nextPurpose }));
-                        if (resourceSaveTimers.current.purpose) {
-                          clearTimeout(resourceSaveTimers.current.purpose);
-                        }
-                        markResourceSaving();
-                        resourceSaveTimers.current.purpose = setTimeout(() => {
-                          saveResource({ purpose: nextPurpose });
-                        }, 500);
-                      }}
-                    />
-                  </div>
+                  <LabeledInput
+                    label="Title"
+                    value={resourceDraft.title}
+                    onChange={(e) => {
+                      const nextTitle = e.target.value;
+                      setResourceDraft((prev) => ({ ...prev, title: nextTitle }));
+                      if (resourceSaveTimers.current.title) {
+                        clearTimeout(resourceSaveTimers.current.title);
+                      }
+                      markResourceSaving();
+                      resourceSaveTimers.current.title = setTimeout(() => {
+                        saveResource({ title: nextTitle });
+                      }, 500);
+                    }}
+                  />
+                  <LabeledInput
+                    label="Purpose"
+                    value={resourceDraft.purpose}
+                    onChange={(e) => {
+                      const nextPurpose = e.target.value;
+                      setResourceDraft((prev) => ({ ...prev, purpose: nextPurpose }));
+                      if (resourceSaveTimers.current.purpose) {
+                        clearTimeout(resourceSaveTimers.current.purpose);
+                      }
+                      markResourceSaving();
+                      resourceSaveTimers.current.purpose = setTimeout(() => {
+                        saveResource({ purpose: nextPurpose });
+                      }, 500);
+                    }}
+                  />
                   <div className="field">
                     <label>Notes</label>
                     <textarea
@@ -705,10 +616,10 @@ const Project = () => {
                     }}
                   />
                 </div>
-                <div className="field">
-                  <label>Link URL</label>
-                  <input
+                  <LabeledInput
+                    label="Link URL"
                     value={resourceDraft.url}
+                    placeholder="https://"
                     onChange={(e) => {
                       const nextUrl = e.target.value;
                       setResourceDraft((prev) => ({ ...prev, url: nextUrl }));
@@ -720,9 +631,7 @@ const Project = () => {
                         saveResource({ url: nextUrl });
                       }, 500);
                     }}
-                    placeholder="https://"
                   />
-                </div>
                   <div className="actions-row">
                     <button
                       className="button"
@@ -751,41 +660,37 @@ const Project = () => {
               )}
               {activeDetail === "tab" && selectedTab && (
                 <>
-                  <div className="field">
-                    <label>Title</label>
-                    <input
-                      value={tabDraft.title}
-                      onChange={(e) => {
-                        const nextTitle = e.target.value;
-                        setTabDraft((prev) => ({ ...prev, title: nextTitle }));
-                        if (tabSaveTimers.current.title) {
-                          clearTimeout(tabSaveTimers.current.title);
-                        }
-                        markTabSaving();
-                        tabSaveTimers.current.title = setTimeout(() => {
-                          saveTab({ title: nextTitle });
-                        }, 500);
-                      }}
-                    />
-                  </div>
-                  <div className="field">
-                    <label>Link URL</label>
-                    <input
-                      value={tabDraft.url}
-                      onChange={(e) => {
-                        const nextUrl = e.target.value;
-                        setTabDraft((prev) => ({ ...prev, url: nextUrl }));
-                        if (tabSaveTimers.current.url) {
-                          clearTimeout(tabSaveTimers.current.url);
-                        }
-                        markTabSaving();
-                        tabSaveTimers.current.url = setTimeout(() => {
-                          saveTab({ url: nextUrl });
-                        }, 500);
-                      }}
-                      placeholder="https://"
-                    />
-                  </div>
+                  <LabeledInput
+                    label="Title"
+                    value={tabDraft.title}
+                    onChange={(e) => {
+                      const nextTitle = e.target.value;
+                      setTabDraft((prev) => ({ ...prev, title: nextTitle }));
+                      if (tabSaveTimers.current.title) {
+                        clearTimeout(tabSaveTimers.current.title);
+                      }
+                      markTabSaving();
+                      tabSaveTimers.current.title = setTimeout(() => {
+                        saveTab({ title: nextTitle });
+                      }, 500);
+                    }}
+                  />
+                  <LabeledInput
+                    label="Link URL"
+                    value={tabDraft.url}
+                    placeholder="https://"
+                    onChange={(e) => {
+                      const nextUrl = e.target.value;
+                      setTabDraft((prev) => ({ ...prev, url: nextUrl }));
+                      if (tabSaveTimers.current.url) {
+                        clearTimeout(tabSaveTimers.current.url);
+                      }
+                      markTabSaving();
+                      tabSaveTimers.current.url = setTimeout(() => {
+                        saveTab({ url: nextUrl });
+                      }, 500);
+                    }}
+                  />
                   <div className="actions-row">
                     <button
                       className="button"

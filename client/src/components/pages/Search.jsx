@@ -1,19 +1,12 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import Brand from "../modules/Brand";
+import SearchBar from "../modules/SearchBar";
 
 const Search = () => {
-  const navigate = useNavigate();
-
   return (
     <div className="layout">
       <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">LT</div>
-          <div>
-            <div className="brand-title">LinkTracker</div>
-            <div className="sidebar-reminder">Search</div>
-          </div>
-        </div>
+        <Brand subtitle="Search" />
       </aside>
 
       <main className="main">
@@ -22,9 +15,7 @@ const Search = () => {
             <div className="topbar-title">Search</div>
             <div className="sidebar-reminder">Search page placeholder.</div>
           </div>
-          <div className="search-bar" onClick={() => navigate("/search")}>
-            Search (shell only)
-          </div>
+          <SearchBar />
         </header>
 
         <section className="panel">

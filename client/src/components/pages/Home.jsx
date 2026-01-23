@@ -1,13 +1,14 @@
 import React, { useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { GoogleLogin, googleLogout } from "@react-oauth/google";
-
 import { get, post } from "../../utilities";
 import { UserContext } from "../App";
+import Brand from "../modules/Brand";
+import SearchBar from "../modules/SearchBar";
+import AuthControls from "../modules/AuthControls";
 
 const Home = () => {
   const navigate = useNavigate();
-  const { user, authReady, handleLogin, handleLogout } = useContext(UserContext);
+  const { user, authReady } = useContext(UserContext);
   const [projects, setProjects] = useState([]);
   const [formState, setFormState] = useState({ title: "", description: "" });
   const [error, setError] = useState("");
@@ -53,21 +54,7 @@ const Home = () => {
   return (
     <div className="layout">
       <aside className="sidebar">
-        <div
-          className="brand"
-          role="button"
-          tabIndex={0}
-          onClick={() => navigate("/")}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") navigate("/");
-          }}
-        >
-          <div className="brand-mark">LT</div>
-          <div>
-            <div className="brand-title">LinkTracker</div>
-            <div className="sidebar-reminder">Project hub</div>
-          </div>
-        </div>
+        <Brand subtitle="Project hub" />
 
         <div>
           <div className="section-title">Reminders</div>
@@ -91,30 +78,8 @@ const Home = () => {
             <div className="sidebar-reminder">Track resources, tabs, and notes.</div>
           </div>
           <div className="topbar-actions">
-            <div className="search-bar" onClick={() => navigate("/search")}>
-              Search (shell only)
-            </div>
-            {user ? (
-              <div className="auth-chip">
-                <span className="auth-name">{user.name}</span>
-                <button
-                  className="button ghost"
-                  type="button"
-                  onClick={() => {
-                    googleLogout();
-                    handleLogout();
-                  }}
-                >
-                  Sign out
-                </button>
-              </div>
-            ) : (
-              <GoogleLogin
-                onSuccess={handleLogin}
-                onError={(err) => console.log(err)}
-                useOneTap
-              />
-            )}
+            <SearchBar />
+            <AuthControls />
           </div>
         </header>
 

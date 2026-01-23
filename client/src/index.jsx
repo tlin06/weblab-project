@@ -16,10 +16,11 @@ import {
 
 const router = createBrowserRouter(
   createRoutesFromElements(
-    <Route errorElement={<NotFound />} element={<App />}>
+    <Route element={<App />}>
       <Route path="/" element={<Home />} />
       <Route path="/project/:projectId" element={<Project />} />
       <Route path="/search" element={<Search />} />
+      <Route path="*" element={<NotFound />} />
     </Route>
   )
 );
