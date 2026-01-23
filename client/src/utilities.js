@@ -42,7 +42,9 @@ function convertToJSON(res) {
 // Returns a Promise to a JSON Object.
 export function get(endpoint, params = {}) {
   const fullPath = endpoint + "?" + formatParams(params);
-  return fetch(fullPath, { credentials: "include" })
+  const token = localStorage.getItem("lt_token");
+  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+  return fetch(fullPath, { credentials: "include", headers })
     .then(convertToJSON)
     .catch((error) => {
       // give a useful error message
@@ -53,9 +55,14 @@ export function get(endpoint, params = {}) {
 // Helper code to make a post request. Default parameter of empty JSON Object for params.
 // Returns a Promise to a JSON Object.
 export function post(endpoint, params = {}) {
+  const token = localStorage.getItem("lt_token");
+  const headers = {
+    "Content-type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
   return fetch(endpoint, {
     method: "post",
-    headers: { "Content-type": "application/json" },
+    headers,
     credentials: "include",
     body: JSON.stringify(params),
   })
@@ -69,9 +76,14 @@ export function post(endpoint, params = {}) {
 // Helper code to make a patch request. Default parameter of empty JSON Object for params.
 // Returns a Promise to a JSON Object.
 export function patch(endpoint, params = {}) {
+  const token = localStorage.getItem("lt_token");
+  const headers = {
+    "Content-type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
   return fetch(endpoint, {
     method: "patch",
-    headers: { "Content-type": "application/json" },
+    headers,
     credentials: "include",
     body: JSON.stringify(params),
   })

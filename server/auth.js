@@ -52,10 +52,30 @@ function logout(req, res) {
   res.send({});
 }
 
-function populateCurrentUser(req, res, next) {
-  // simply populate "req.user" for convenience
-  req.user = req.session.user;
-  next();
+async function populateCurrentUser(req, res, next) {
+  if (req.session?.user) {
+    req.user = req.session.user;
+    return next();
+  }
+
+  const authHeader = req.headers.authorization || "";
+  if (!authHeader.startsWith("Bearer ")) {
+    return next();
+  }
+
+  const token = authHeader.slice("Bearer ".length).trim();
+  if (!token) return next();
+
+  try {
+    const payload = await verify(token);
+    const user = await getOrCreateUser(payload);
+    req.session.user = user;
+    req.user = user;
+    return next();
+  } catch (err) {
+    console.log(`Failed to authorize bearer token: ${err}`);
+    return next();
+  }
 }
 
 function ensureLoggedIn(req, res, next) {

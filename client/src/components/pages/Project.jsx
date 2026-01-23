@@ -24,6 +24,8 @@ const Project = () => {
   const [isEditingPurpose, setIsEditingPurpose] = useState(false);
   const [saveError, setSaveError] = useState("");
   const notesSaveTimer = useRef(null);
+  const [tabDraft, setTabDraft] = useState({ title: "", url: "" });
+  const [tabError, setTabError] = useState("");
 
   useEffect(() => {
     if (!authReady) return;
@@ -141,30 +143,35 @@ const Project = () => {
       });
   };
 
-  const handleAddTabGroup = () => {
+  const handleAddTab = () => {
     if (!project) return;
-    const title = window.prompt("Tab group title");
-    if (!title) return;
-    post(`/api/projects/${projectId}/tabgroups`, { title }).then((tabGroup) => {
-      setProject((prev) => ({
-        ...prev,
-        tabGroups: [...(prev?.tabGroups || []), tabGroup],
-      }));
-    });
-  };
+    const title = tabDraft.title.trim();
+    const url = tabDraft.url.trim();
+    if (!title || !url) {
+      setTabError("Add a title and a URL first.");
+      return;
+    }
+    setTabError("");
+    const existingGroup = (project.tabGroups || [])[0];
+    const ensureGroup = existingGroup
+      ? Promise.resolve(existingGroup)
+      : post(`/api/projects/${projectId}/tabgroups`, { title: "Tabs" });
 
-  const handleAddTab = (tabGroupId) => {
-    if (!project) return;
-    const title = window.prompt("Tab title");
-    const url = window.prompt("Tab URL");
-    if (!title || !url) return;
-    post(`/api/tabgroups/${tabGroupId}/links`, { title, url }).then((tabGroup) => {
-      setProject((prev) => ({
-        ...prev,
-        tabGroups: prev.tabGroups.map((group) =>
-          group._id === tabGroup._id ? tabGroup : group
-        ),
-      }));
+    ensureGroup.then((tabGroup) => {
+      post(`/api/tabgroups/${tabGroup._id}/links`, { title, url }).then((updated) => {
+        setProject((prev) => {
+          const currentGroups = prev?.tabGroups || [];
+          const hasGroup = currentGroups.some((group) => group._id === updated._id);
+          const nextGroups = hasGroup
+            ? currentGroups.map((group) => (group._id === updated._id ? updated : group))
+            : [...currentGroups, updated];
+          return {
+            ...prev,
+            tabGroups: nextGroups,
+          };
+        });
+        setTabDraft({ title: "", url: "" });
+      });
     });
   };
 
@@ -311,135 +318,174 @@ const Project = () => {
                   + Add Resource
                 </button>
               </div>
-              {project?.resources?.length ? (
-                project.resources.map((resource) => (
-                  <div
-                    key={resource._id}
-                    className={`resource-item ${
-                      resource._id === selectedResourceId ? "active" : ""
-                    }`}
-                    onClick={() => setSelectedResourceId(resource._id)}
-                  >
-                <div className="resource-title">{resource.title}</div>
-              </div>
-            ))
-          ) : (
-            <div className="empty-state">No resources yet.</div>
-          )}
-
-              <div className="tabgroup">
-                <div className="panel-header">
-                  <div className="panel-title">Tab Groups</div>
-                  <button className="button ghost" type="button" onClick={handleAddTabGroup}>
-                    + Add Group
-                  </button>
-                </div>
-                {(project?.tabGroups || []).length === 0 && (
-                  <div className="empty-state">No tab groups yet.</div>
+              <div className="resource-list">
+                {project?.resources?.length ? (
+                  project.resources.map((resource) => (
+                    <div
+                      key={resource._id}
+                      className={`resource-item ${
+                        resource._id === selectedResourceId ? "active" : ""
+                      }`}
+                      onClick={() => setSelectedResourceId(resource._id)}
+                    >
+                      <div className="resource-title">{resource.title}</div>
+                      {resource.purpose && (
+                        <div className="resource-description">{resource.purpose}</div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="empty-state">No resources yet.</div>
                 )}
-                {(project?.tabGroups || []).map((tabGroup) => (
-                  <div key={tabGroup._id} style={{ marginBottom: "12px" }}>
-                    <div className="resource-title">{tabGroup.title}</div>
-                    {(tabGroup.links || []).map((link, idx) => (
-                      <div className="tab-link" key={`${link.title}-${idx}`}>
-                        <span>{link.title}</span>
-                        <span>{link.url}</span>
-                      </div>
-                    ))}
+              </div>
+
+            <div className="tabgroup">
+              <div className="panel-header">
+                <div className="panel-title">Tabs</div>
+                <button className="button ghost" type="button" onClick={handleAddTab}>
+                  + Add Tab
+                </button>
+              </div>
+              {tabError && <div className="empty-state">{tabError}</div>}
+              <div className="field">
+                <label>Tab title</label>
+                <input
+                  value={tabDraft.title}
+                  onChange={(e) =>
+                    setTabDraft((prev) => ({ ...prev, title: e.target.value }))
+                  }
+                  placeholder="New tab title"
+                />
+              </div>
+              <div className="field">
+                <label>Tab URL</label>
+                <input
+                  value={tabDraft.url}
+                  onChange={(e) => setTabDraft((prev) => ({ ...prev, url: e.target.value }))}
+                  placeholder="https://"
+                />
+              </div>
+              {(() => {
+                const links = (project?.tabGroups || []).flatMap(
+                  (group) => group.links || []
+                );
+                if (links.length === 0) {
+                  return <div className="empty-state">No tabs yet.</div>;
+                }
+                return (
+                  <>
+                    <div className="tab-list">
+                      {links.map((link, idx) => (
+                        <div className="tab-link" key={`${link.title}-${idx}`}>
+                          <span>{link.title}</span>
+                        </div>
+                      ))}
+                    </div>
                     <div className="tab-actions">
                       <button
                         className="button ghost"
                         type="button"
-                        onClick={() => handleOpenAllTabs(tabGroup)}
+                        onClick={() =>
+                          handleOpenAllTabs({
+                            links,
+                          })
+                        }
                       >
                         Open All Tabs
                       </button>
-                      <button
-                        className="button ghost"
-                        type="button"
-                        onClick={() => handleAddTab(tabGroup._id)}
-                      >
-                        + Add Tab
-                      </button>
                     </div>
-                  </div>
-                ))}
+                  </>
+                );
+              })()}
               </div>
             </section>
 
             <section className="panel">
-            <div className="panel-header">
-              <div className="panel-title">Resource Details</div>
-            </div>
-            {saveError && <div className="empty-state">{saveError}</div>}
-            {!selectedResource && <div className="empty-state">Select a resource.</div>}
-            {selectedResource && (
-              <>
-                <div className="field">
-                  <div className="field-header">
-                    <label>Title</label>
-                    <button
-                      className="button ghost small"
-                      type="button"
-                      onClick={() => {
-                        if (isEditingTitle) {
-                          saveResource({ title: resourceDraft.title });
-                        }
-                        setIsEditingTitle((prev) => !prev);
-                      }}
-                    >
-                      {isEditingTitle ? "Done" : "Edit"}
-                    </button>
+              <div className="panel-header">
+                <div className="panel-title">Resource Details</div>
+              </div>
+              {saveError && <div className="empty-state">{saveError}</div>}
+              {!selectedResource && <div className="empty-state">Select a resource.</div>}
+              {selectedResource && (
+                <>
+                  <div className="field">
+                    <div className="field-header">
+                      <label>Title</label>
+                      <button
+                        className="button ghost small"
+                        type="button"
+                        onClick={() => {
+                          if (isEditingTitle) {
+                            saveResource({ title: resourceDraft.title });
+                          }
+                          setIsEditingTitle((prev) => !prev);
+                        }}
+                      >
+                        {isEditingTitle ? "Done" : "Edit"}
+                      </button>
+                    </div>
+                    <input
+                      value={resourceDraft.title}
+                      disabled={!isEditingTitle}
+                      onChange={(e) =>
+                        setResourceDraft((prev) => ({ ...prev, title: e.target.value }))
+                      }
+                    />
                   </div>
-                  <input
-                    value={resourceDraft.title}
-                    disabled={!isEditingTitle}
-                    onChange={(e) =>
-                      setResourceDraft((prev) => ({ ...prev, title: e.target.value }))
-                    }
-                  />
-                </div>
-                <div className="field">
-                  <div className="field-header">
-                    <label>Purpose</label>
-                    <button
-                      className="button ghost small"
-                      type="button"
-                      onClick={() => {
-                        if (isEditingPurpose) {
-                          saveResource({ purpose: resourceDraft.purpose });
-                        }
-                        setIsEditingPurpose((prev) => !prev);
-                      }}
-                    >
-                      {isEditingPurpose ? "Done" : "Edit"}
-                    </button>
-                  </div>
-                  <input
-                    value={resourceDraft.purpose}
-                    disabled={!isEditingPurpose}
-                    onChange={(e) =>
-                      setResourceDraft((prev) => ({ ...prev, purpose: e.target.value }))
-                    }
-                  />
+                  <div className="field">
+                    <div className="field-header">
+                      <label>Purpose</label>
+                      <button
+                        className="button ghost small"
+                        type="button"
+                        onClick={() => {
+                          if (isEditingPurpose) {
+                            saveResource({ purpose: resourceDraft.purpose });
+                          }
+                          setIsEditingPurpose((prev) => !prev);
+                        }}
+                      >
+                        {isEditingPurpose ? "Done" : "Edit"}
+                      </button>
+                    </div>
+                    <input
+                      value={resourceDraft.purpose}
+                      disabled={!isEditingPurpose}
+                      onChange={(e) =>
+                        setResourceDraft((prev) => ({ ...prev, purpose: e.target.value }))
+                      }
+                    />
                   </div>
                   <div className="field">
                     <label>Notes</label>
-                  <textarea
-                    rows="5"
-                    value={resourceDraft.notes}
-                    onChange={(e) => {
-                      const nextNotes = e.target.value;
-                      setResourceDraft((prev) => ({ ...prev, notes: nextNotes }));
-                      if (notesSaveTimer.current) {
-                        clearTimeout(notesSaveTimer.current);
+                    <textarea
+                      rows="5"
+                      value={resourceDraft.notes}
+                      onChange={(e) => {
+                        const nextNotes = e.target.value;
+                        setResourceDraft((prev) => ({ ...prev, notes: nextNotes }));
+                        if (notesSaveTimer.current) {
+                          clearTimeout(notesSaveTimer.current);
+                        }
+                        notesSaveTimer.current = setTimeout(() => {
+                          saveResource({ notes: nextNotes });
+                        }, 500);
+                      }}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Link URL</label>
+                    <input
+                      value={resourceDraft.url}
+                      onChange={(e) =>
+                        setResourceDraft((prev) => ({ ...prev, url: e.target.value }))
                       }
-                      notesSaveTimer.current = setTimeout(() => {
-                        saveResource({ notes: nextNotes });
-                      }, 500);
-                    }}
-                  />
-                </div>
+                      onBlur={() => {
+                        saveResource({ url: resourceDraft.url });
+                      }}
+                      placeholder="https://"
+                    />
+                  </div>
                   <div className="actions-row">
                     <button
                       className="button"

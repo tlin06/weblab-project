@@ -37,6 +37,7 @@ const App = () => {
     if (!token) {
       return Promise.reject("Missing Google credential.");
     }
+    localStorage.setItem("lt_token", token);
     return post("/api/login", { token }).then((loggedInUser) => {
       setUser(loggedInUser);
       return loggedInUser;
@@ -45,6 +46,7 @@ const App = () => {
 
   const handleLogout = () => {
     return post("/api/logout").then(() => {
+      localStorage.removeItem("lt_token");
       setUser(null);
     });
   };

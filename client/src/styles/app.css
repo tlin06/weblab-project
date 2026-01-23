@@ -276,6 +276,12 @@ body {
   cursor: pointer;
 }
 
+.resource-list {
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .resource-item.active {
   border-color: rgba(59, 130, 246, 0.45);
   background: rgba(59, 130, 246, 0.05);
@@ -342,6 +348,12 @@ body {
   color: var(--muted);
   padding: 6px 0;
   border-bottom: 1px solid var(--border);
+}
+
+.tab-list {
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .tab-actions {
