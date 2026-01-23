@@ -20,15 +20,25 @@ const Project = () => {
     notes: "",
     url: "",
   });
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [isEditingPurpose, setIsEditingPurpose] = useState(false);
   const [saveError, setSaveError] = useState("");
   const notesSaveTimer = useRef(null);
+  const resourceSaveTimers = useRef({
+    title: null,
+    purpose: null,
+    url: null,
+  });
+  const [resourceSaveStatus, setResourceSaveStatus] = useState("");
+  const resourceStatusTimer = useRef(null);
   const [selectedTabKey, setSelectedTabKey] = useState(null);
   const [activeDetail, setActiveDetail] = useState("resource");
   const [tabDraft, setTabDraft] = useState({ title: "", url: "" });
-  const [isEditingTabTitle, setIsEditingTabTitle] = useState(false);
-  const [isEditingTabUrl, setIsEditingTabUrl] = useState(false);
+  const tabSaveTimers = useRef({
+    title: null,
+    url: null,
+  });
+  const [tabSaveStatus, setTabSaveStatus] = useState("");
+  const tabStatusTimer = useRef(null);
+  const [confirmState, setConfirmState] = useState(null);
 
   useEffect(() => {
     if (!authReady) return;
@@ -75,15 +85,30 @@ const Project = () => {
       title: projectDraft.title,
       description: projectDraft.description,
     }).then((updated) => {
-      setProject(updated);
       setProjects((prev) =>
         prev.map((item) => (item._id === updated._id ? updated : item))
       );
+      return get(`/api/projects/${projectId}`);
+    }).then((fresh) => {
+      setProject(fresh);
       setProjectDraft({
-        title: updated.title || "",
-        description: updated.description || "",
+        title: fresh.title || "",
+        description: fresh.description || "",
       });
       setIsEditingProject(false);
+    });
+  };
+
+  const handleDeleteProject = () => {
+    if (!projectId) return;
+    setConfirmState({
+      message: "Delete this project? This cannot be undone.",
+      onConfirm: () => {
+        post(`/api/projects/${projectId}/delete`).then(() => {
+          setProjects((prev) => prev.filter((item) => item._id !== projectId));
+          navigate("/");
+        });
+      },
     });
   };
 
@@ -104,9 +129,8 @@ const Project = () => {
         notes: selectedResource.notes || "",
         url: selectedResource.url || "",
       });
-      setIsEditingTitle(false);
-      setIsEditingPurpose(false);
       setSaveError("");
+      setResourceSaveStatus("");
     }
   }, [selectedResource]);
 
@@ -127,8 +151,7 @@ const Project = () => {
         title: selectedTab.title || "",
         url: selectedTab.url || "",
       });
-      setIsEditingTabTitle(false);
-      setIsEditingTabUrl(false);
+      setTabSaveStatus("");
     }
   }, [selectedTab]);
 
@@ -137,8 +160,46 @@ const Project = () => {
       if (notesSaveTimer.current) {
         clearTimeout(notesSaveTimer.current);
       }
+      if (resourceStatusTimer.current) {
+        clearTimeout(resourceStatusTimer.current);
+      }
+      if (tabStatusTimer.current) {
+        clearTimeout(tabStatusTimer.current);
+      }
+      Object.values(resourceSaveTimers.current).forEach((timer) => {
+        if (timer) clearTimeout(timer);
+      });
+      Object.values(tabSaveTimers.current).forEach((timer) => {
+        if (timer) clearTimeout(timer);
+      });
     };
   }, []);
+
+  const markResourceSaving = () => {
+    setResourceSaveStatus("Saving...");
+    if (resourceStatusTimer.current) clearTimeout(resourceStatusTimer.current);
+  };
+
+  const markResourceSaved = () => {
+    setResourceSaveStatus("Saved");
+    if (resourceStatusTimer.current) clearTimeout(resourceStatusTimer.current);
+    resourceStatusTimer.current = setTimeout(() => {
+      setResourceSaveStatus("");
+    }, 1200);
+  };
+
+  const markTabSaving = () => {
+    setTabSaveStatus("Saving...");
+    if (tabStatusTimer.current) clearTimeout(tabStatusTimer.current);
+  };
+
+  const markTabSaved = () => {
+    setTabSaveStatus("Saved");
+    if (tabStatusTimer.current) clearTimeout(tabStatusTimer.current);
+    tabStatusTimer.current = setTimeout(() => {
+      setTabSaveStatus("");
+    }, 1200);
+  };
 
   const handleAddResource = () => {
     if (!project) return;
@@ -168,6 +229,7 @@ const Project = () => {
             ),
           };
         });
+        markResourceSaved();
         return updated;
       })
       .catch((err) => {
@@ -224,7 +286,74 @@ const Project = () => {
           ),
         };
       });
+      markTabSaved();
       return updated;
+    });
+  };
+
+  const handleDeleteResource = () => {
+    if (!selectedResourceId) return;
+    setConfirmState({
+      message: "Delete this resource?",
+      onConfirm: () => {
+        post(`/api/resources/${selectedResourceId}/delete`).then(() => {
+          setProject((prev) => {
+            if (!prev) return prev;
+            const nextResources = (prev.resources || []).filter(
+              (resource) => String(resource._id) !== String(selectedResourceId)
+            );
+            return {
+              ...prev,
+              resources: nextResources,
+            };
+          });
+          setSelectedResourceId((prevId) => {
+            const remaining = project?.resources?.filter(
+              (resource) => String(resource._id) !== String(prevId)
+            );
+            const next = remaining?.[0]?._id;
+            if (next) {
+              setActiveDetail("resource");
+              return String(next);
+            }
+            return null;
+          });
+        });
+      },
+    });
+  };
+
+  const handleDeleteTab = () => {
+    if (!tabGroup?._id || !selectedTabKey) return;
+    setConfirmState({
+      message: "Delete this tab?",
+      onConfirm: () => {
+        const isIndexKey = selectedTabKey.startsWith("idx:");
+        const endpoint = isIndexKey
+          ? `/api/tabgroups/${tabGroup._id}/links/index/${selectedTabKey.replace("idx:", "")}/delete`
+          : `/api/tabgroups/${tabGroup._id}/links/${selectedTabKey}/delete`;
+        post(endpoint).then((updated) => {
+          setProject((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              tabGroups: (prev.tabGroups || []).map((group) =>
+                group._id === updated._id ? updated : group
+              ),
+            };
+          });
+          const nextLinks = updated.links || [];
+          if (nextLinks.length > 0) {
+            const next = nextLinks[0];
+            const key = next._id ? String(next._id) : "idx:0";
+            setSelectedTabKey(key);
+            setActiveDetail("tab");
+          } else {
+            setSelectedTabKey(null);
+            setActiveDetail("resource");
+          }
+        });
+      },
     });
   };
 
@@ -250,6 +379,34 @@ const Project = () => {
 
   return (
     <div className="layout">
+      {confirmState && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="modal-title">Confirm</div>
+            <div className="modal-body">{confirmState.message}</div>
+            <div className="modal-actions">
+              <button
+                className="button ghost"
+                type="button"
+                onClick={() => setConfirmState(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="button"
+                type="button"
+                onClick={() => {
+                  const action = confirmState.onConfirm;
+                  setConfirmState(null);
+                  action();
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <aside className="sidebar">
         <div
           className="brand"
@@ -329,19 +486,24 @@ const Project = () => {
           </div>
           <div className="topbar-actions">
             {user && (
-              <button
-                className="button ghost"
-                type="button"
-                onClick={() => {
-                  if (isEditingProject) {
-                    handleSaveProject();
-                  } else {
-                    setIsEditingProject(true);
-                  }
-                }}
-              >
-                {isEditingProject ? "Save Project" : "Edit Project"}
-              </button>
+              <>
+                <button
+                  className="button ghost"
+                  type="button"
+                  onClick={() => {
+                    if (isEditingProject) {
+                      handleSaveProject();
+                    } else {
+                      setIsEditingProject(true);
+                    }
+                  }}
+                >
+                  {isEditingProject ? "Save Project" : "Edit Project"}
+                </button>
+                <button className="button ghost" type="button" onClick={handleDeleteProject}>
+                  Delete Project
+                </button>
+              </>
             )}
             <div className="search-bar" onClick={() => navigate("/search")}>
               Search (shell only)
@@ -389,7 +551,9 @@ const Project = () => {
                     <div
                       key={resource._id}
                       className={`resource-item ${
-                        resource._id === selectedResourceId ? "active" : ""
+                        activeDetail === "resource" && resource._id === selectedResourceId
+                          ? "active"
+                          : ""
                       }`}
                     onClick={() => {
                       setSelectedResourceId(resource._id);
@@ -423,6 +587,7 @@ const Project = () => {
                       <div
                         key={link._id || link.title}
                         className={`resource-item ${
+                          activeDetail === "tab" &&
                           (link._id
                             ? String(link._id) === String(selectedTabKey)
                             : `idx:${idx}` === String(selectedTabKey))
@@ -463,6 +628,22 @@ const Project = () => {
                 <div className="panel-title">
                   {activeDetail === "tab" ? "Tab Details" : "Resource Details"}
                 </div>
+                {activeDetail === "resource" && resourceSaveStatus && (
+                  <div className="status-pill">{resourceSaveStatus}</div>
+                )}
+                {activeDetail === "tab" && tabSaveStatus && (
+                  <div className="status-pill">{tabSaveStatus}</div>
+                )}
+                {activeDetail === "resource" && selectedResource && (
+                  <button className="button ghost" type="button" onClick={handleDeleteResource}>
+                    Delete
+                  </button>
+                )}
+                {activeDetail === "tab" && selectedTab && (
+                  <button className="button ghost" type="button" onClick={handleDeleteTab}>
+                    Delete
+                  </button>
+                )}
               </div>
               {saveError && activeDetail === "resource" && (
                 <div className="empty-state">{saveError}</div>
@@ -473,51 +654,37 @@ const Project = () => {
               {activeDetail === "resource" && selectedResource && (
                 <>
                   <div className="field">
-                    <div className="field-header">
-                      <label>Title</label>
-                      <button
-                        className="button ghost small"
-                        type="button"
-                        onClick={() => {
-                          if (isEditingTitle) {
-                            saveResource({ title: resourceDraft.title });
-                          }
-                          setIsEditingTitle((prev) => !prev);
-                        }}
-                      >
-                        {isEditingTitle ? "Done" : "Edit"}
-                      </button>
-                    </div>
+                    <label>Title</label>
                     <input
                       value={resourceDraft.title}
-                      disabled={!isEditingTitle}
-                      onChange={(e) =>
-                        setResourceDraft((prev) => ({ ...prev, title: e.target.value }))
-                      }
+                      onChange={(e) => {
+                        const nextTitle = e.target.value;
+                        setResourceDraft((prev) => ({ ...prev, title: nextTitle }));
+                        if (resourceSaveTimers.current.title) {
+                          clearTimeout(resourceSaveTimers.current.title);
+                        }
+                        markResourceSaving();
+                        resourceSaveTimers.current.title = setTimeout(() => {
+                          saveResource({ title: nextTitle });
+                        }, 500);
+                      }}
                     />
                   </div>
                   <div className="field">
-                    <div className="field-header">
-                      <label>Purpose</label>
-                      <button
-                        className="button ghost small"
-                        type="button"
-                        onClick={() => {
-                          if (isEditingPurpose) {
-                            saveResource({ purpose: resourceDraft.purpose });
-                          }
-                          setIsEditingPurpose((prev) => !prev);
-                        }}
-                      >
-                        {isEditingPurpose ? "Done" : "Edit"}
-                      </button>
-                    </div>
+                    <label>Purpose</label>
                     <input
                       value={resourceDraft.purpose}
-                      disabled={!isEditingPurpose}
-                      onChange={(e) =>
-                        setResourceDraft((prev) => ({ ...prev, purpose: e.target.value }))
-                      }
+                      onChange={(e) => {
+                        const nextPurpose = e.target.value;
+                        setResourceDraft((prev) => ({ ...prev, purpose: nextPurpose }));
+                        if (resourceSaveTimers.current.purpose) {
+                          clearTimeout(resourceSaveTimers.current.purpose);
+                        }
+                        markResourceSaving();
+                        resourceSaveTimers.current.purpose = setTimeout(() => {
+                          saveResource({ purpose: nextPurpose });
+                        }, 500);
+                      }}
                     />
                   </div>
                   <div className="field">
@@ -528,28 +695,34 @@ const Project = () => {
                       onChange={(e) => {
                         const nextNotes = e.target.value;
                         setResourceDraft((prev) => ({ ...prev, notes: nextNotes }));
-                        if (notesSaveTimer.current) {
-                          clearTimeout(notesSaveTimer.current);
-                        }
-                        notesSaveTimer.current = setTimeout(() => {
-                          saveResource({ notes: nextNotes });
-                        }, 500);
-                      }}
-                    />
-                  </div>
-                  <div className="field">
-                    <label>Link URL</label>
-                    <input
-                      value={resourceDraft.url}
-                      onChange={(e) =>
-                        setResourceDraft((prev) => ({ ...prev, url: e.target.value }))
+                      if (notesSaveTimer.current) {
+                        clearTimeout(notesSaveTimer.current);
                       }
-                      onBlur={() => {
-                        saveResource({ url: resourceDraft.url });
-                      }}
-                      placeholder="https://"
-                    />
-                  </div>
+                      markResourceSaving();
+                      notesSaveTimer.current = setTimeout(() => {
+                        saveResource({ notes: nextNotes });
+                      }, 500);
+                    }}
+                  />
+                </div>
+                <div className="field">
+                  <label>Link URL</label>
+                  <input
+                    value={resourceDraft.url}
+                    onChange={(e) => {
+                      const nextUrl = e.target.value;
+                      setResourceDraft((prev) => ({ ...prev, url: nextUrl }));
+                      if (resourceSaveTimers.current.url) {
+                        clearTimeout(resourceSaveTimers.current.url);
+                      }
+                      markResourceSaving();
+                      resourceSaveTimers.current.url = setTimeout(() => {
+                        saveResource({ url: nextUrl });
+                      }, 500);
+                    }}
+                    placeholder="https://"
+                  />
+                </div>
                   <div className="actions-row">
                     <button
                       className="button"
@@ -579,51 +752,37 @@ const Project = () => {
               {activeDetail === "tab" && selectedTab && (
                 <>
                   <div className="field">
-                    <div className="field-header">
-                      <label>Title</label>
-                      <button
-                        className="button ghost small"
-                        type="button"
-                        onClick={() => {
-                          if (isEditingTabTitle) {
-                            saveTab({ title: tabDraft.title });
-                          }
-                          setIsEditingTabTitle((prev) => !prev);
-                        }}
-                      >
-                        {isEditingTabTitle ? "Done" : "Edit"}
-                      </button>
-                    </div>
+                    <label>Title</label>
                     <input
                       value={tabDraft.title}
-                      disabled={!isEditingTabTitle}
-                      onChange={(e) =>
-                        setTabDraft((prev) => ({ ...prev, title: e.target.value }))
-                      }
+                      onChange={(e) => {
+                        const nextTitle = e.target.value;
+                        setTabDraft((prev) => ({ ...prev, title: nextTitle }));
+                        if (tabSaveTimers.current.title) {
+                          clearTimeout(tabSaveTimers.current.title);
+                        }
+                        markTabSaving();
+                        tabSaveTimers.current.title = setTimeout(() => {
+                          saveTab({ title: nextTitle });
+                        }, 500);
+                      }}
                     />
                   </div>
                   <div className="field">
-                    <div className="field-header">
-                      <label>Link URL</label>
-                      <button
-                        className="button ghost small"
-                        type="button"
-                        onClick={() => {
-                          if (isEditingTabUrl) {
-                            saveTab({ url: tabDraft.url });
-                          }
-                          setIsEditingTabUrl((prev) => !prev);
-                        }}
-                      >
-                        {isEditingTabUrl ? "Done" : "Edit"}
-                      </button>
-                    </div>
+                    <label>Link URL</label>
                     <input
                       value={tabDraft.url}
-                      disabled={!isEditingTabUrl}
-                      onChange={(e) =>
-                        setTabDraft((prev) => ({ ...prev, url: e.target.value }))
-                      }
+                      onChange={(e) => {
+                        const nextUrl = e.target.value;
+                        setTabDraft((prev) => ({ ...prev, url: nextUrl }));
+                        if (tabSaveTimers.current.url) {
+                          clearTimeout(tabSaveTimers.current.url);
+                        }
+                        markTabSaving();
+                        tabSaveTimers.current.url = setTimeout(() => {
+                          saveTab({ url: nextUrl });
+                        }, 500);
+                      }}
                       placeholder="https://"
                     />
                   </div>

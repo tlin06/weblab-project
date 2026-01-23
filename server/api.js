@@ -111,6 +111,24 @@ router.post("/projects/:projectId", auth.ensureLoggedIn, (req, res) => {
     .catch(() => res.status(404).send({ msg: "Project not found" }));
 });
 
+router.post("/projects/:projectId/delete", auth.ensureLoggedIn, (req, res) => {
+  Project.findById(req.params.projectId)
+    .then((project) => {
+      if (!project) {
+        return res.status(404).send({ msg: "Project not found" });
+      }
+
+      if (project.creator && String(project.creator) !== String(req.user._id)) {
+        return res.status(403).send({ msg: "Project not found" });
+      }
+
+      return Project.findByIdAndDelete(req.params.projectId).then(() =>
+        res.send({ success: true })
+      );
+    })
+    .catch(() => res.status(404).send({ msg: "Project not found" }));
+});
+
 router.post("/projects/:projectId/resources", auth.ensureLoggedIn, (req, res) => {
   Project.findOne({ _id: req.params.projectId, creator: req.user._id }).then((project) => {
     if (!project) {
@@ -202,6 +220,34 @@ router.post("/resources/:resourceId", auth.ensureLoggedIn, (req, res) => {
     .catch(() => res.status(404).send({ msg: "Resource not found" }));
 });
 
+router.post("/resources/:resourceId/delete", auth.ensureLoggedIn, (req, res) => {
+  Resource.findById(req.params.resourceId)
+    .then((resource) => {
+      if (!resource) {
+        return res.status(404).send({ msg: "Resource not found" });
+      }
+
+      return Project.findById(resource.projectId).then((project) => {
+        if (!project) {
+          return res.status(404).send({ msg: "Project not found" });
+        }
+
+        if (project.creator && String(project.creator) !== String(req.user._id)) {
+          return res.status(403).send({ msg: "Project not found" });
+        }
+
+        return Resource.findByIdAndDelete(req.params.resourceId).then(() =>
+          Project.findByIdAndUpdate(
+            resource.projectId,
+            { $pull: { resources: req.params.resourceId } },
+            { new: true }
+          ).then(() => res.send({ success: true }))
+        );
+      });
+    })
+    .catch(() => res.status(404).send({ msg: "Resource not found" }));
+});
+
 router.post("/projects/:projectId/tabgroups", auth.ensureLoggedIn, (req, res) => {
   Project.findOne({ _id: req.params.projectId, creator: req.user._id }).then((project) => {
     if (!project) {
@@ -285,6 +331,74 @@ router.post("/tabgroups/:tabGroupId/links/:linkId", auth.ensureLoggedIn, (req, r
     })
     .catch(() => res.status(404).send({ msg: "Tab group not found" }));
 });
+
+router.post(
+  "/tabgroups/:tabGroupId/links/:linkId/delete",
+  auth.ensureLoggedIn,
+  (req, res) => {
+    TabGroup.findById(req.params.tabGroupId)
+      .then((tabGroup) => {
+        if (!tabGroup) {
+          return res.status(404).send({ msg: "Tab group not found" });
+        }
+
+        return Project.findOne({
+          _id: tabGroup.projectId,
+          creator: req.user._id,
+        }).then((project) => {
+          if (!project) {
+            return res.status(404).send({ msg: "Project not found" });
+          }
+
+          return TabGroup.findByIdAndUpdate(
+            req.params.tabGroupId,
+            { $pull: { links: { _id: req.params.linkId } } },
+            { new: true }
+          ).then((updated) => res.send(updated));
+        });
+      })
+      .catch(() => res.status(404).send({ msg: "Tab group not found" }));
+  }
+);
+
+router.post(
+  "/tabgroups/:tabGroupId/links/index/:linkIndex/delete",
+  auth.ensureLoggedIn,
+  (req, res) => {
+    const index = Number(req.params.linkIndex);
+    if (!Number.isInteger(index) || index < 0) {
+      return res.status(400).send({ msg: "Invalid tab index" });
+    }
+
+    TabGroup.findById(req.params.tabGroupId)
+      .then((tabGroup) => {
+        if (!tabGroup) {
+          return res.status(404).send({ msg: "Tab group not found" });
+        }
+
+        if (!tabGroup.links || index >= tabGroup.links.length) {
+          return res.status(404).send({ msg: "Tab not found" });
+        }
+
+        return Project.findOne({
+          _id: tabGroup.projectId,
+          creator: req.user._id,
+        }).then((project) => {
+          if (!project) {
+            return res.status(404).send({ msg: "Project not found" });
+          }
+
+          const nextLinks = tabGroup.links.filter((_, idx) => idx !== index);
+          return TabGroup.findByIdAndUpdate(
+            req.params.tabGroupId,
+            { $set: { links: nextLinks } },
+            { new: true }
+          ).then((updated) => res.send(updated));
+        });
+      })
+      .catch(() => res.status(404).send({ msg: "Tab group not found" }));
+  }
+);
 
 router.post(
   "/tabgroups/:tabGroupId/links/index/:linkIndex",
