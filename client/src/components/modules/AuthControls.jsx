@@ -4,12 +4,12 @@ import { GoogleLogin, googleLogout } from "@react-oauth/google";
 import { UserContext } from "../App";
 
 const AuthControls = () => {
-  const { user, handleLogin, handleLogout } = useContext(UserContext);
+  const { userId, handleLogin, handleLogout } = useContext(UserContext);
 
-  if (user) {
+  if (userId) {
     return (
       <div className="auth-chip">
-        <span className="auth-name">{user.name}</span>
+        <span className="auth-name">Signed in</span>
         <button
           className="button ghost"
           type="button"

@@ -1,71 +1,56 @@
-import React, { createContext, useEffect, useMemo, useState } from "react";
+import React, { useState, useEffect, createContext } from "react";
 import { Outlet } from "react-router-dom";
 
-import { get, post } from "../utilities";
+import jwt_decode from "jwt-decode";
+
 import "../utilities.css";
 import "../styles/app.css";
 
-export const UserContext = createContext({
-  user: null,
-  authReady: false,
-  handleLogin: () => Promise.resolve(),
-  handleLogout: () => Promise.resolve(),
-});
+import { socket } from "../client-socket";
+
+import { get, post } from "../utilities";
+
+export const UserContext = createContext(null);
 
 /**
  * Define the "App" component
  */
 const App = () => {
-  const [user, setUser] = useState(null);
-  const [authReady, setAuthReady] = useState(false);
+  const [userId, setUserId] = useState(undefined);
 
   useEffect(() => {
-    get("/api/whoami")
-      .then((data) => {
-        setUser(data && data._id ? data : null);
-      })
-      .catch(() => {
-        setUser(null);
-      })
-      .finally(() => {
-        setAuthReady(true);
-      });
+    get("/api/whoami").then((user) => {
+      if (user._id) {
+        // they are registed in the database, and currently logged in.
+        setUserId(user._id);
+      }
+    });
   }, []);
 
   const handleLogin = (credentialResponse) => {
-    const token = credentialResponse?.credential;
-    if (!token) {
-      return Promise.reject("Missing Google credential.");
-    }
-    localStorage.setItem("lt_token", token);
-    return post("/api/login", { token }).then((loggedInUser) => {
-      setUser(loggedInUser);
-      return loggedInUser;
+    const userToken = credentialResponse.credential;
+    const decodedCredential = jwt_decode(userToken);
+    console.log(`Logged in as ${decodedCredential.name}`);
+    post("/api/login", { token: userToken }).then((user) => {
+      setUserId(user._id);
+      post("/api/initsocket", { socketid: socket.id });
     });
   };
 
   const handleLogout = () => {
-    return post("/api/logout").then(() => {
-      localStorage.removeItem("lt_token");
-      setUser(null);
-    });
+    setUserId(undefined);
+    post("/api/logout");
   };
 
-  const value = useMemo(
-    () => ({
-      user,
-      authReady,
-      handleLogin,
-      handleLogout,
-    }),
-    [user, authReady]
-  );
+  const authContextValue = {
+    userId,
+    handleLogin,
+    handleLogout,
+  };
 
   return (
-    <UserContext.Provider value={value}>
-      <div className="app-shell">
-        <Outlet />
-      </div>
+    <UserContext.Provider value={authContextValue}>
+      <Outlet />
     </UserContext.Provider>
   );
 };

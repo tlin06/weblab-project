@@ -13,7 +13,7 @@ import ConfirmModal from "../modules/ConfirmModal";
 const Project = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const { user, authReady } = useContext(UserContext);
+  const { userId } = useContext(UserContext);
   const [projects, setProjects] = useState([]);
   const [project, setProject] = useState(null);
   const [projectDraft, setProjectDraft] = useState({ title: "", description: "" });
@@ -46,17 +46,15 @@ const Project = () => {
   const [confirmState, setConfirmState] = useState(null);
 
   useEffect(() => {
-    if (!authReady) return;
-    if (!user) {
+    if (!userId) {
       setProjects([]);
       return;
     }
     get("/api/projects").then((data) => setProjects(data));
-  }, [user, authReady]);
+  }, [userId]);
 
   useEffect(() => {
-    if (!authReady) return;
-    if (!user) {
+    if (!userId) {
       setProject(null);
       setSelectedResourceId(null);
       return;
@@ -77,7 +75,7 @@ const Project = () => {
       const firstTab = (data.tabGroups || [])[0]?.links?.[0];
       setSelectedTabKey(firstTab?._id ? String(firstTab._id) : null);
     });
-  }, [projectId, user, authReady]);
+  }, [projectId, userId]);
 
   const handleSaveProject = () => {
     if (!projectId) return;
@@ -440,7 +438,7 @@ const Project = () => {
             )}
           </div>
           <div className="topbar-actions">
-            {user && (
+            {userId && (
               <>
                 <button
                   className="button ghost"
@@ -465,7 +463,7 @@ const Project = () => {
           </div>
         </header>
 
-        {!user && authReady ? (
+        {!userId ? (
           <div className="empty-state" style={{ padding: "16px 18px" }}>
             Sign in to view this project.
           </div>

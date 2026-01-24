@@ -1,21 +1,9 @@
-const STORAGE_KEY = "lt_project_order";
+let cachedOrder = [];
 
-export const getProjectOrder = () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
+export const getProjectOrder = () => cachedOrder;
 
 export const setProjectOrder = (order) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(order));
-  } catch {
-    // ignore storage errors
-  }
+  cachedOrder = Array.isArray(order) ? order.map((id) => String(id)) : [];
 };
 
 export const applyProjectOrder = (projects) => {

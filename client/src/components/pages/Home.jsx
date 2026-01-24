@@ -8,14 +8,13 @@ import AuthControls from "../modules/AuthControls";
 
 const Home = () => {
   const navigate = useNavigate();
-  const { user, authReady } = useContext(UserContext);
+  const { userId } = useContext(UserContext);
   const [projects, setProjects] = useState([]);
   const [formState, setFormState] = useState({ title: "", description: "" });
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!authReady) return;
-    if (!user) {
+    if (!userId) {
       setProjects([]);
       setError("");
       return;
@@ -26,12 +25,12 @@ const Home = () => {
         console.log(err);
         setError("Could not load projects. Is the server running?");
       });
-  }, [user, authReady]);
+  }, [userId]);
 
   const reminders = projects.flatMap((project) => project.reminders || []);
 
   const handleCreateProject = () => {
-    if (!user) {
+    if (!userId) {
       setError("Please sign in to create a project.");
       return;
     }
@@ -90,13 +89,13 @@ const Home = () => {
               className="button"
               type="button"
               onClick={handleCreateProject}
-              disabled={!user}
+              disabled={!userId}
             >
               Create
             </button>
           </div>
           {error && <div className="empty-state">{error}</div>}
-          {!user && (
+          {!userId && (
             <div className="empty-state">Sign in to view and create projects.</div>
           )}
           <div className="field">
@@ -121,11 +120,11 @@ const Home = () => {
 
         <div className="grid-scroll">
           <section className="grid">
-            {!user && <div className="empty-state">Sign in to see your projects.</div>}
-            {user && projects.length === 0 && (
+            {!userId && <div className="empty-state">Sign in to see your projects.</div>}
+            {userId && projects.length === 0 && (
               <div className="empty-state">No projects yet. Create one above.</div>
             )}
-            {user &&
+            {userId &&
               projects.map((project) => (
                 <div
                   key={project._id}
