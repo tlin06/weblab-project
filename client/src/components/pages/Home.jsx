@@ -58,9 +58,7 @@ const Home = () => {
         <div>
           <div className="section-title">Reminders</div>
           <div className="sidebar-list">
-            {reminders.length === 0 && (
-              <div className="sidebar-reminder">No reminders yet.</div>
-            )}
+            {reminders.length === 0 && <div className="sidebar-reminder">No reminders yet.</div>}
             {reminders.map((reminder, idx) => (
               <div className="sidebar-item" key={`${reminder}-${idx}`}>
                 {reminder}
@@ -95,25 +93,21 @@ const Home = () => {
             </button>
           </div>
           {error && <div className="empty-state">{error}</div>}
-          {!userId && (
-            <div className="empty-state">Sign in to view and create projects.</div>
-          )}
+          {!userId && <div className="empty-state">Sign in to view and create projects.</div>}
           <div className="field">
             <label>Project title</label>
             <input
               value={formState.title}
               onChange={(e) => setFormState((prev) => ({ ...prev, title: e.target.value }))}
-              placeholder="e.g. 6.9620 - Final build"
+              placeholder="e.g. 6.1210"
             />
           </div>
           <div className="field">
             <label>Short description</label>
             <input
               value={formState.description}
-              onChange={(e) =>
-                setFormState((prev) => ({ ...prev, description: e.target.value }))
-              }
-              placeholder="What are you working on?"
+              onChange={(e) => setFormState((prev) => ({ ...prev, description: e.target.value }))}
+              placeholder="What is this for?"
             />
           </div>
         </section>
@@ -129,12 +123,7 @@ const Home = () => {
                 <div
                   key={project._id}
                   className="card"
-                  role="button"
-                  tabIndex={0}
                   onClick={() => navigate(`/project/${project._id}`)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") navigate(`/project/${project._id}`);
-                  }}
                 >
                   <div className="card-title">{project.title}</div>
                   <div className="card-description">

@@ -24,7 +24,7 @@ const AuthControls = () => {
     );
   }
 
-  return <GoogleLogin onSuccess={handleLogin} onError={(err) => console.log(err)} useOneTap />;
+  return <GoogleLogin onSuccess={handleLogin} onError={(err) => console.log(err)} />;
 };
 
 export default AuthControls;

@@ -1,19 +1,11 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 const Brand = ({ subtitle }) => {
   const navigate = useNavigate();
 
   return (
-    <div
-      className="brand"
-      role="button"
-      tabIndex={0}
-      onClick={() => navigate("/")}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") navigate("/");
-      }}
-    >
+    <div className="brand" onClick={() => navigate("/")}>
       <div className="brand-mark">
         <img src="/link_logo.svg" alt="LinkTracker logo" className="brand-logo" />
       </div>

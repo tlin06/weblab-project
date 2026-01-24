@@ -22,14 +22,14 @@ const TabPanel = ({
       ) : (
         <>
           <div className="tab-list">
-            {tabs.map((link, idx) => {
-              const key = getTabKey(link, idx);
+            {tabs.map((link) => {
+              const key = getTabKey(link);
               const isActive = activeDetail === "tab" && key === selectedTabKey;
               return (
                 <div
-                  key={link._id || `${link.title}-${idx}`}
+                  key={link._id}
                   className={`resource-item ${isActive ? "active" : ""}`}
-                  onClick={() => onSelectTab(link, idx)}
+                  onClick={() => onSelectTab(link)}
                 >
                   <div className="resource-title">{link.title}</div>
                 </div>

@@ -25,15 +25,12 @@ const Project = () => {
     notes: "",
     url: "",
   });
-  const [saveError, setSaveError] = useState("");
-  const notesSaveTimer = useRef(null);
   const resourceSaveTimers = useRef({
     title: null,
     purpose: null,
+    notes: null,
     url: null,
   });
-  const [resourceSaveStatus, setResourceSaveStatus] = useState("");
-  const resourceStatusTimer = useRef(null);
   const [selectedTabKey, setSelectedTabKey] = useState(null);
   const [activeDetail, setActiveDetail] = useState("resource");
   const [tabDraft, setTabDraft] = useState({ title: "", url: "" });
@@ -41,8 +38,6 @@ const Project = () => {
     title: null,
     url: null,
   });
-  const [tabSaveStatus, setTabSaveStatus] = useState("");
-  const tabStatusTimer = useRef(null);
   const [confirmState, setConfirmState] = useState(null);
 
   useEffect(() => {
@@ -126,8 +121,6 @@ const Project = () => {
         notes: selectedResource.notes || "",
         url: selectedResource.url || "",
       });
-      setSaveError("");
-      setResourceSaveStatus("");
     }
   }, [selectedResource]);
 
@@ -145,21 +138,11 @@ const Project = () => {
         title: selectedTab.title || "",
         url: selectedTab.url || "",
       });
-      setTabSaveStatus("");
     }
   }, [selectedTab]);
 
   useEffect(() => {
     return () => {
-      if (notesSaveTimer.current) {
-        clearTimeout(notesSaveTimer.current);
-      }
-      if (resourceStatusTimer.current) {
-        clearTimeout(resourceStatusTimer.current);
-      }
-      if (tabStatusTimer.current) {
-        clearTimeout(tabStatusTimer.current);
-      }
       Object.values(resourceSaveTimers.current).forEach((timer) => {
         if (timer) clearTimeout(timer);
       });
@@ -168,32 +151,6 @@ const Project = () => {
       });
     };
   }, []);
-
-  const markResourceSaving = () => {
-    setResourceSaveStatus("Saving...");
-    if (resourceStatusTimer.current) clearTimeout(resourceStatusTimer.current);
-  };
-
-  const markResourceSaved = () => {
-    setResourceSaveStatus("Saved");
-    if (resourceStatusTimer.current) clearTimeout(resourceStatusTimer.current);
-    resourceStatusTimer.current = setTimeout(() => {
-      setResourceSaveStatus("");
-    }, 1200);
-  };
-
-  const markTabSaving = () => {
-    setTabSaveStatus("Saving...");
-    if (tabStatusTimer.current) clearTimeout(tabStatusTimer.current);
-  };
-
-  const markTabSaved = () => {
-    setTabSaveStatus("Saved");
-    if (tabStatusTimer.current) clearTimeout(tabStatusTimer.current);
-    tabStatusTimer.current = setTimeout(() => {
-      setTabSaveStatus("");
-    }, 1200);
-  };
 
   const handleAddResource = () => {
     if (!project) return;
@@ -211,7 +168,6 @@ const Project = () => {
 
   const saveResource = (updates) => {
     if (!selectedResourceId) return Promise.resolve();
-    setSaveError("");
     return post(`/api/resources/${selectedResourceId}`, updates)
       .then((updated) => {
         setProject((prev) => {
@@ -223,12 +179,10 @@ const Project = () => {
             ),
           };
         });
-        markResourceSaved();
         return updated;
       })
       .catch((err) => {
         console.log(err);
-        setSaveError("Save failed. Please sign in and try again.");
       });
   };
 
@@ -277,7 +231,6 @@ const Project = () => {
             ),
           };
         });
-        markTabSaved();
         return updated;
       }
     );
@@ -487,7 +440,7 @@ const Project = () => {
                 activeDetail={activeDetail}
                 getTabKey={getTabKey}
                 onAddTab={handleAddTab}
-                onSelectTab={(link, idx) => {
+                onSelectTab={(link) => {
                   const key = getTabKey(link);
                   if (!key) return;
                   setSelectedTabKey(key);
@@ -506,12 +459,6 @@ const Project = () => {
                 <div className="panel-title">
                   {activeDetail === "tab" ? "Tab Details" : "Resource Details"}
                 </div>
-                {activeDetail === "resource" && resourceSaveStatus && (
-                  <div className="status-pill">{resourceSaveStatus}</div>
-                )}
-                {activeDetail === "tab" && tabSaveStatus && (
-                  <div className="status-pill">{tabSaveStatus}</div>
-                )}
                 {activeDetail === "resource" && selectedResource && (
                   <button className="button ghost" type="button" onClick={handleDeleteResource}>
                     Delete
@@ -523,9 +470,6 @@ const Project = () => {
                   </button>
                 )}
               </div>
-              {saveError && activeDetail === "resource" && (
-                <div className="empty-state">{saveError}</div>
-              )}
               {activeDetail === "resource" && !selectedResource && (
                 <div className="empty-state">Select a resource.</div>
               )}
@@ -540,7 +484,6 @@ const Project = () => {
                       if (resourceSaveTimers.current.title) {
                         clearTimeout(resourceSaveTimers.current.title);
                       }
-                      markResourceSaving();
                       resourceSaveTimers.current.title = setTimeout(() => {
                         saveResource({ title: nextTitle });
                       }, 500);
@@ -555,7 +498,6 @@ const Project = () => {
                       if (resourceSaveTimers.current.purpose) {
                         clearTimeout(resourceSaveTimers.current.purpose);
                       }
-                      markResourceSaving();
                       resourceSaveTimers.current.purpose = setTimeout(() => {
                         saveResource({ purpose: nextPurpose });
                       }, 500);
@@ -569,11 +511,10 @@ const Project = () => {
                       onChange={(e) => {
                         const nextNotes = e.target.value;
                         setResourceDraft((prev) => ({ ...prev, notes: nextNotes }));
-                        if (notesSaveTimer.current) {
-                          clearTimeout(notesSaveTimer.current);
+                        if (resourceSaveTimers.current.notes) {
+                          clearTimeout(resourceSaveTimers.current.notes);
                         }
-                        markResourceSaving();
-                        notesSaveTimer.current = setTimeout(() => {
+                        resourceSaveTimers.current.notes = setTimeout(() => {
                           saveResource({ notes: nextNotes });
                         }, 500);
                       }}
@@ -589,7 +530,6 @@ const Project = () => {
                       if (resourceSaveTimers.current.url) {
                         clearTimeout(resourceSaveTimers.current.url);
                       }
-                      markResourceSaving();
                       resourceSaveTimers.current.url = setTimeout(() => {
                         saveResource({ url: nextUrl });
                       }, 500);
@@ -632,7 +572,6 @@ const Project = () => {
                       if (tabSaveTimers.current.title) {
                         clearTimeout(tabSaveTimers.current.title);
                       }
-                      markTabSaving();
                       tabSaveTimers.current.title = setTimeout(() => {
                         saveTab({ title: nextTitle });
                       }, 500);
@@ -648,7 +587,6 @@ const Project = () => {
                       if (tabSaveTimers.current.url) {
                         clearTimeout(tabSaveTimers.current.url);
                       }
-                      markTabSaving();
                       tabSaveTimers.current.url = setTimeout(() => {
                         saveTab({ url: nextUrl });
                       }, 500);
