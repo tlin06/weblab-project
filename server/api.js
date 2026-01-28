@@ -51,6 +51,14 @@ router.get("/projects", auth.ensureLoggedIn, (req, res) => {
     .then((projects) => res.send(projects));
 });
 
+router.get("/projects/search", auth.ensureLoggedIn, (req, res) => {
+  Project.find({ creator: req.user._id })
+    .sort({ createdAt: -1 })
+    .populate("resources")
+    .populate("tabGroups")
+    .then((projects) => res.send(projects));
+});
+
 router.get("/projects/:projectId", auth.ensureLoggedIn, (req, res) => {
   Project.findOne({ _id: req.params.projectId, creator: req.user._id })
     .populate("resources")
