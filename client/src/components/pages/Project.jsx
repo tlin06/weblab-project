@@ -1,8 +1,8 @@
 import React, {
   useContext,
   useEffect,
-  useLayoutEffect,
   useMemo,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -16,6 +16,10 @@ import ResourcePanel from "../modules/ResourcePanel";
 import TabPanel from "../modules/TabPanel";
 import AuthControls from "../modules/AuthControls";
 import ConfirmModal from "../modules/ConfirmModal";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import {
   applyProjectOrder,
   applyResourceOrder,
@@ -46,6 +50,22 @@ const Project = () => {
     url: "",
   });
   const [isNotesExpanded, setIsNotesExpanded] = useState(false);
+  const [isNotesPreview, setIsNotesPreview] = useState(false);
+  const [isNotesMarkdownEnabled, setIsNotesMarkdownEnabled] = useState(() => {
+    try {
+      return localStorage.getItem("lt_notes_markdown_enabled") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("lt_notes_markdown_enabled", String(isNotesMarkdownEnabled));
+    } catch {
+      // ignore storage errors
+    }
+  }, [isNotesMarkdownEnabled]);
   const [saveError, setSaveError] = useState("");
   const notesSaveTimer = useRef(null);
   const resourceSaveTimers = useRef({
@@ -513,6 +533,15 @@ const Project = () => {
     }, 500);
   };
 
+  const normalizedNotes = useMemo(() => {
+    const raw = resourceDraft.notes || "";
+    if (!raw.includes("$$")) return raw;
+    return raw.replace(/\$\$([\s\S]+?)\$\$/g, (_, expr) => {
+      const trimmed = String(expr).trim();
+      return `\n\n$$\n${trimmed}\n$$\n\n`;
+    });
+  }, [resourceDraft.notes]);
+
   const handleConfirmAddResource = () => {
     if (!project) return;
     const title = resourceCreateState.title.trim() || "New Resource";
@@ -707,13 +736,39 @@ const Project = () => {
               Notes: {resourceDraft.title || selectedResource?.title || "Untitled Resource"}
             </div>
             <div className="modal-body notes-modal-body">
-              <textarea
-                className="notes-textarea"
-                value={resourceDraft.notes}
-                onChange={(e) => handleNotesChange(e.target.value)}
-              />
+              <div
+                className={`notes-split ${
+                  isNotesMarkdownEnabled ? "" : "notes-split-single"
+                }`}
+              >
+                <div className="notes-pane">
+                  <div className="notes-pane-title">Markdown</div>
+                  <textarea
+                    className="notes-textarea"
+                    value={resourceDraft.notes}
+                    onChange={(e) => handleNotesChange(e.target.value)}
+                  />
+                </div>
+                {isNotesMarkdownEnabled && (
+                  <div className="notes-pane">
+                    <div className="notes-pane-title">Preview Markdown</div>
+                    <div className="notes-preview">
+                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                      {normalizedNotes || "Nothing to preview yet."}
+                    </ReactMarkdown>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="modal-actions">
+              <button
+                className="button ghost"
+                type="button"
+                onClick={() => setIsNotesMarkdownEnabled((prev) => !prev)}
+              >
+                {isNotesMarkdownEnabled ? "Disable Markdown" : "Enable Markdown"}
+              </button>
               <button className="button ghost" type="button" onClick={() => setIsNotesExpanded(false)}>
                 Close
               </button>
@@ -1010,19 +1065,36 @@ const Project = () => {
                   <div className="field">
                     <div className="field-header">
                       <label>Notes</label>
-                      <button
-                        className="button ghost small"
-                        type="button"
-                        onClick={() => setIsNotesExpanded(true)}
-                      >
-                        Expand
-                      </button>
+                      <div className="field-actions">
+                        <button
+                          className="button ghost small"
+                          type="button"
+                          onClick={() => setIsNotesPreview((prev) => !prev)}
+                        >
+                          {isNotesPreview ? "Edit" : "Preview Markdown"}
+                        </button>
+                        <button
+                          className="button ghost small"
+                          type="button"
+                          onClick={() => setIsNotesExpanded(true)}
+                        >
+                          Expand
+                        </button>
+                      </div>
                     </div>
-                    <textarea
-                      rows="5"
-                      value={resourceDraft.notes}
-                      onChange={(e) => handleNotesChange(e.target.value)}
-                    />
+                    {isNotesPreview ? (
+                      <div className="notes-preview">
+                        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                          {normalizedNotes || "Nothing to preview yet."}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      <textarea
+                        rows="5"
+                        value={resourceDraft.notes}
+                        onChange={(e) => handleNotesChange(e.target.value)}
+                      />
+                    )}
                   </div>
                   <LabeledInput
                     label="Link URL"

@@ -60,8 +60,8 @@ const ResourcePanel = ({
       const threshold = movingDown
         ? rect.top + rect.height * 0.7
         : movingUp
-        ? rect.top + rect.height * 0.3
-        : rect.top + rect.height / 2;
+          ? rect.top + rect.height * 0.3
+          : rect.top + rect.height / 2;
       if (clientY < threshold) return i;
     }
     return items.length;
@@ -69,10 +69,7 @@ const ResourcePanel = ({
 
   const queueDragOver = (nextIndex) => {
     if (nextIndex === null || Number.isNaN(nextIndex)) return;
-    if (
-      pendingDragOverIndex.current === nextIndex &&
-      dragOverIndexRef.current === nextIndex
-    ) {
+    if (pendingDragOverIndex.current === nextIndex && dragOverIndexRef.current === nextIndex) {
       return;
     }
     pendingDragOverIndex.current = nextIndex;
@@ -215,28 +212,24 @@ const ResourcePanel = ({
             const isDragOver =
               dragOverIndex !== null && resources.indexOf(resource) === dragOverIndex;
             return (
-            <div
-              key={resource._id}
-              ref={setItemRef(resource._id)}
-              className={`resource-item ${
-                activeDetail === "resource" && resource._id === selectedResourceId
-                  ? "active"
-                  : ""
-              } ${isDragging ? "dragging" : ""} ${isDragHidden ? "drag-hidden" : ""} ${
-                isDragOver ? "drag-over" : ""
-              }`}
-              draggable
-              onDragStart={handleDragStart(resource._id)}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop()}
-              onDragEnd={handleDragEnd}
-              onClick={() => onSelectResource(resource._id)}
-            >
-              <div className="resource-title">{resource.title}</div>
-              {resource.purpose && (
-                <div className="resource-description">{resource.purpose}</div>
-              )}
-            </div>
+              <div
+                key={resource._id}
+                ref={setItemRef(resource._id)}
+                className={`resource-item ${
+                  activeDetail === "resource" && resource._id === selectedResourceId ? "active" : ""
+                } ${isDragging ? "dragging" : ""} ${isDragHidden ? "drag-hidden" : ""} ${
+                  isDragOver ? "drag-over" : ""
+                }`}
+                draggable
+                onDragStart={handleDragStart(resource._id)}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop()}
+                onDragEnd={handleDragEnd}
+                onClick={() => onSelectResource(resource._id)}
+              >
+                <div className="resource-title">{resource.title}</div>
+                {resource.purpose && <div className="resource-description">{resource.purpose}</div>}
+              </div>
             );
           })
         ) : (
