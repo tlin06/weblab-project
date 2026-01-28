@@ -1,5 +1,5 @@
 {
-  "name": "link-tracker-scaffold-2",
+  "name": "link-tracker",
   "version": "1.0.0",
   "description": "",
   "main": "server/server.js",

@@ -188,7 +188,7 @@ const ResourcePanel = ({
   };
 
   return (
-    <>
+    <div className="resource-panel">
       <div className="panel-header">
         <div className="panel-title">Resources</div>
         <button className="button ghost" type="button" onClick={onAddResource}>
@@ -236,7 +236,7 @@ const ResourcePanel = ({
           <div className="empty-state">No resources yet.</div>
         )}
       </div>
-    </>
+    </div>
   );
 };
 

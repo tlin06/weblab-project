@@ -28,6 +28,13 @@ const Search = () => {
 
   const normalizedQuery = query.trim().toLowerCase();
   const tokens = normalizedQuery ? normalizedQuery.split(/\s+/) : [];
+  const normalizeUrlForSearch = (value) => {
+    if (!value) return "";
+    const trimmed = String(value).trim().toLowerCase();
+    if (!trimmed) return "";
+    const withoutProtocol = trimmed.replace(/^https?:\/\//, "");
+    return withoutProtocol.replace(/^www\./, "");
+  };
   const matchesTokens = (text) => {
     if (!tokens.length) return false;
     const haystack = String(text || "").toLowerCase();
@@ -46,9 +53,10 @@ const Search = () => {
     const results = [];
     projects.forEach((project) => {
       (project.resources || []).forEach((resource) => {
+        const normalizedUrl = normalizeUrlForSearch(resource.url);
         const haystack = `${resource.title || ""} ${resource.purpose || ""} ${
           resource.notes || ""
-        } ${resource.url || ""}`;
+        } ${resource.url || ""} ${normalizedUrl}`;
         if (matchesTokens(haystack)) {
           results.push({
             ...resource,
@@ -67,7 +75,10 @@ const Search = () => {
     projects.forEach((project) => {
       (project.tabGroups || []).forEach((group) => {
         (group.links || []).forEach((link) => {
-          const haystack = `${link.title || ""} ${link.url || ""} ${link.description || ""}`;
+          const normalizedUrl = normalizeUrlForSearch(link.url);
+          const haystack = `${link.title || ""} ${link.url || ""} ${normalizedUrl} ${
+            link.description || ""
+          }`;
           if (matchesTokens(haystack)) {
             results.push({
               ...link,
@@ -152,10 +163,16 @@ const Search = () => {
                             className="search-item"
                             role="button"
                             tabIndex={0}
-                            onClick={() => navigate(`/project/${resource.projectId}`)}
+                            onClick={() =>
+                              navigate(`/project/${resource.projectId}`, {
+                                state: { resourceId: resource._id },
+                              })
+                            }
                             onKeyDown={(event) => {
                               if (event.key === "Enter")
-                                navigate(`/project/${resource.projectId}`);
+                                navigate(`/project/${resource.projectId}`, {
+                                  state: { resourceId: resource._id },
+                                });
                             }}
                           >
                             <div className="search-item-title">{resource.title}</div>
