@@ -407,6 +407,10 @@ body {
   padding: 12px;
   margin-bottom: 10px;
   cursor: pointer;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease;
 }
 
 .resource-list {
@@ -420,6 +424,37 @@ body {
   background: rgba(59, 130, 246, 0.05);
 }
 
+.resource-item.dragging {
+  opacity: 0.7;
+  transform: scale(0.98);
+}
+
+.resource-item.drag-over {
+  border-color: rgba(59, 130, 246, 0.6);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18);
+  transform: translateY(-2px);
+}
+
+.resource-item.drag-placeholder {
+  border: 2px dashed rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.08);
+  box-shadow: none;
+  cursor: default;
+}
+
+.resource-item.drag-hidden {
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  overflow: hidden;
+  pointer-events: none;
+  left: -9999px;
+  top: -9999px;
+}
 .resource-title {
   font-weight: 800;
 }
@@ -545,6 +580,28 @@ body {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.notes-modal {
+  width: min(900px, 92vw);
+  height: min(80vh, 720px);
+  display: flex;
+  flex-direction: column;
+}
+
+.notes-modal-body {
+  flex: 1;
+  display: flex;
+}
+
+.notes-textarea {
+  flex: 1;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  resize: none;
+  font-size: 14px;
 }
 
 @media (max-width: 980px) {

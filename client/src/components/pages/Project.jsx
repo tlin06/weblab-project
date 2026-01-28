@@ -18,8 +18,16 @@ import AuthControls from "../modules/AuthControls";
 import ConfirmModal from "../modules/ConfirmModal";
 import {
   applyProjectOrder,
+  applyResourceOrder,
+  applyTabOrder,
+  insertResourceOrder,
+  insertTabOrder,
   removeProjectOrder,
+  removeResourceOrder,
+  removeTabOrder,
   reorderProjectOrder,
+  reorderResourceOrder,
+  reorderTabOrder,
 } from "../modules/projectOrder";
 
 const Project = () => {
@@ -37,6 +45,7 @@ const Project = () => {
     notes: "",
     url: "",
   });
+  const [isNotesExpanded, setIsNotesExpanded] = useState(false);
   const [saveError, setSaveError] = useState("");
   const notesSaveTimer = useRef(null);
   const resourceSaveTimers = useRef({
@@ -179,19 +188,31 @@ const Project = () => {
       return;
     }
     get(`/api/projects/${projectId}`).then((data) => {
-      setProject(data);
+      const orderedResources = applyResourceOrder(projectId, data.resources || []);
+      const nextTabGroups = (data.tabGroups || []).map((group, index) => {
+        if (index !== 0) return group;
+        return {
+          ...group,
+          links: applyTabOrder(projectId, group.links || []),
+        };
+      });
+      setProject({
+        ...data,
+        resources: orderedResources,
+        tabGroups: nextTabGroups,
+      });
       setProjectDraft({
         title: data.title || "",
         description: data.description || "",
       });
       setIsEditingProject(false);
-      if (data.resources && data.resources.length > 0) {
-        setSelectedResourceId(String(data.resources[0]._id));
+      if (orderedResources.length > 0) {
+        setSelectedResourceId(String(orderedResources[0]._id));
         setActiveDetail("resource");
       } else {
         setSelectedResourceId(null);
       }
-      const firstTab = (data.tabGroups || [])[0]?.links?.[0];
+      const firstTab = nextTabGroups[0]?.links?.[0];
       setSelectedTabKey(firstTab?._id ? String(firstTab._id) : null);
     });
   }, [projectId, user, authReady]);
@@ -366,6 +387,11 @@ const Project = () => {
     );
   }, [project, selectedResourceId]);
 
+  const orderedResources = useMemo(
+    () => applyResourceOrder(projectId, project?.resources || []),
+    [projectId, project?.resources]
+  );
+
   useEffect(() => {
     if (selectedResource) {
       setResourceDraft({
@@ -383,7 +409,10 @@ const Project = () => {
   }, [selectedResource]);
 
   const tabGroup = project?.tabGroups?.[0] || null;
-  const tabs = tabGroup?.links || [];
+  const tabs = useMemo(
+    () => applyTabOrder(projectId, tabGroup?.links || []),
+    [projectId, tabGroup]
+  );
   const getTabKey = (link) => (link?._id ? String(link._id) : null);
   const selectedTab = useMemo(() => {
     if (!selectedTabKey) return null;
@@ -473,6 +502,17 @@ const Project = () => {
     });
   };
 
+  const handleNotesChange = (value) => {
+    setResourceDraft((prev) => ({ ...prev, notes: value }));
+    if (notesSaveTimer.current) {
+      clearTimeout(notesSaveTimer.current);
+    }
+    markResourceSaving();
+    notesSaveTimer.current = setTimeout(() => {
+      saveResource({ notes: value });
+    }, 500);
+  };
+
   const handleConfirmAddResource = () => {
     if (!project) return;
     const title = resourceCreateState.title.trim() || "New Resource";
@@ -486,6 +526,7 @@ const Project = () => {
         ...prev,
         resources: [resource, ...(prev?.resources || [])],
       }));
+      insertResourceOrder(projectId, resource._id, 0);
       setSelectedResourceId(String(resource._id));
       setActiveDetail("resource");
       setResourceCreateState({ isOpen: false, title: "", purpose: "" });
@@ -511,6 +552,8 @@ const Project = () => {
           const nextGroups = hasGroup
             ? currentGroups.map((group) => (group._id === updated._id ? updated : group))
             : [...currentGroups, updated];
+          const updatedLinks = updated.links || [];
+          reorderTabOrder(projectId, updatedLinks.map((link) => link._id));
           return {
             ...prev,
             tabGroups: nextGroups,
@@ -556,6 +599,7 @@ const Project = () => {
             const nextResources = (prev.resources || []).filter(
               (resource) => String(resource._id) !== String(selectedResourceId)
             );
+            removeResourceOrder(projectId, selectedResourceId);
             return {
               ...prev,
               resources: nextResources,
@@ -586,6 +630,7 @@ const Project = () => {
         post(endpoint).then((updated) => {
           setProject((prev) => {
             if (!prev) return prev;
+            removeTabOrder(projectId, selectedTabKey);
             return {
               ...prev,
               tabGroups: (prev.tabGroups || []).map((group) =>
@@ -626,6 +671,23 @@ const Project = () => {
     return `https://${trimmed}`;
   };
 
+  const handleReorderResources = (nextResources) => {
+    setProject((prev) => (prev ? { ...prev, resources: nextResources } : prev));
+    reorderResourceOrder(projectId, nextResources.map((resource) => resource._id));
+  };
+
+  const handleReorderTabs = (nextTabs) => {
+    setProject((prev) => {
+      if (!prev) return prev;
+      const nextGroups = (prev.tabGroups || []).map((group, index) => {
+        if (index !== 0) return group;
+        return { ...group, links: nextTabs };
+      });
+      return { ...prev, tabGroups: nextGroups };
+    });
+    reorderTabOrder(projectId, nextTabs.map((tab) => tab._id));
+  };
+
   return (
     <div className="layout">
       <ConfirmModal
@@ -638,6 +700,27 @@ const Project = () => {
           if (action) action();
         }}
       />
+      {isNotesExpanded && (
+        <div className="modal-backdrop">
+          <div className="modal notes-modal">
+            <div className="modal-title">
+              Notes: {resourceDraft.title || selectedResource?.title || "Untitled Resource"}
+            </div>
+            <div className="modal-body notes-modal-body">
+              <textarea
+                className="notes-textarea"
+                value={resourceDraft.notes}
+                onChange={(e) => handleNotesChange(e.target.value)}
+              />
+            </div>
+            <div className="modal-actions">
+              <button className="button ghost" type="button" onClick={() => setIsNotesExpanded(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {resourceCreateState.isOpen && (
         <div className="modal-backdrop">
           <div className="modal">
@@ -830,10 +913,11 @@ const Project = () => {
           <div className="content-columns">
             <section className="panel">
               <ResourcePanel
-                resources={project?.resources || []}
+                resources={orderedResources}
                 selectedResourceId={selectedResourceId}
                 activeDetail={activeDetail}
                 onAddResource={handleAddResource}
+                onReorderResources={handleReorderResources}
                 onSelectResource={(id) => {
                   setSelectedResourceId(id);
                   setActiveDetail("resource");
@@ -846,6 +930,7 @@ const Project = () => {
                 activeDetail={activeDetail}
                 getTabKey={getTabKey}
                 onAddTab={handleAddTab}
+                onReorderTabs={handleReorderTabs}
                 onSelectTab={(link, idx) => {
                   const key = getTabKey(link);
                   if (!key) return;
@@ -923,21 +1008,20 @@ const Project = () => {
                     }}
                   />
                   <div className="field">
-                    <label>Notes</label>
+                    <div className="field-header">
+                      <label>Notes</label>
+                      <button
+                        className="button ghost small"
+                        type="button"
+                        onClick={() => setIsNotesExpanded(true)}
+                      >
+                        Expand
+                      </button>
+                    </div>
                     <textarea
                       rows="5"
                       value={resourceDraft.notes}
-                      onChange={(e) => {
-                        const nextNotes = e.target.value;
-                        setResourceDraft((prev) => ({ ...prev, notes: nextNotes }));
-                        if (notesSaveTimer.current) {
-                          clearTimeout(notesSaveTimer.current);
-                        }
-                        markResourceSaving();
-                        notesSaveTimer.current = setTimeout(() => {
-                          saveResource({ notes: nextNotes });
-                        }, 500);
-                      }}
+                      onChange={(e) => handleNotesChange(e.target.value)}
                     />
                   </div>
                   <LabeledInput
