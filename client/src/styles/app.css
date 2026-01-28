@@ -589,8 +589,8 @@ body {
 }
 
 .notes-modal {
-  width: min(900px, 92vw);
-  height: min(80vh, 720px);
+  width: min(1040px, 94vw);
+  height: min(86vh, 780px);
   display: flex;
   flex-direction: column;
 }
@@ -646,8 +646,13 @@ body {
   font-size: 14px;
   color: var(--text);
   overflow: auto;
-  min-height: 120px;
-  max-height: 220px;
+  min-height: 200px;
+  max-height: 360px;
+}
+
+.notes-textarea-inline {
+  min-height: 200px;
+  max-height: 360px;
 }
 
 .notes-modal .notes-preview {

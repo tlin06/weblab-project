@@ -16,6 +16,7 @@ import ResourcePanel from "../modules/ResourcePanel";
 import TabPanel from "../modules/TabPanel";
 import AuthControls from "../modules/AuthControls";
 import ConfirmModal from "../modules/ConfirmModal";
+import StatusPill from "../modules/StatusPill";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -762,6 +763,7 @@ const Project = () => {
               </div>
             </div>
             <div className="modal-actions">
+              {resourceSaveStatus && <StatusPill text={resourceSaveStatus} />}
               <button
                 className="button ghost"
                 type="button"
@@ -1007,11 +1009,9 @@ const Project = () => {
                 </div>
                 <div className="panel-actions">
                   {activeDetail === "resource" && resourceSaveStatus && (
-                    <div className="status-pill">{resourceSaveStatus}</div>
+                    <StatusPill text={resourceSaveStatus} />
                   )}
-                  {activeDetail === "tab" && tabSaveStatus && (
-                    <div className="status-pill">{tabSaveStatus}</div>
-                  )}
+                  {activeDetail === "tab" && tabSaveStatus && <StatusPill text={tabSaveStatus} />}
                   {activeDetail === "resource" && selectedResource && (
                     <button className="button ghost" type="button" onClick={handleDeleteResource}>
                       Delete
@@ -1090,7 +1090,8 @@ const Project = () => {
                       </div>
                     ) : (
                       <textarea
-                        rows="5"
+                        className="notes-textarea notes-textarea-inline"
+                        rows="8"
                         value={resourceDraft.notes}
                         onChange={(e) => handleNotesChange(e.target.value)}
                       />
