@@ -29,6 +29,7 @@ const Home = () => {
   const dragOverIndexRef = useRef(null);
   const orderedIdsRef = useRef([]);
   const dragHiddenRaf = useRef(null);
+  const lastPointerRef = useRef({ x: null, y: null });
 
   useEffect(() => {
     if (!authReady) return;
@@ -66,6 +67,7 @@ const Home = () => {
   }, [projects, draggingProjectId, dragOverIndex]);
 
   useLayoutEffect(() => {
+    if (draggingProjectId) return;
     const nextPositions = new Map();
     cardRefs.current.forEach((node, id) => {
       if (!node) return;
@@ -88,7 +90,7 @@ const Home = () => {
       }
     });
     prevPositions.current = nextPositions;
-  }, [renderProjects]);
+  }, [renderProjects, draggingProjectId]);
 
   useEffect(() => {
     dragOverIndexRef.current = dragOverIndex;
@@ -111,12 +113,32 @@ const Home = () => {
       return a.rect.left - b.rect.left;
     });
     orderedIdsRef.current = items.map((item) => item.id);
+    const last = lastPointerRef.current;
+    const movingDown = last.y !== null && clientY > last.y + 1;
+    const movingUp = last.y !== null && clientY < last.y - 1;
+    const movingRight = last.x !== null && clientX > last.x + 1;
+    const movingLeft = last.x !== null && clientX < last.x - 1;
+    lastPointerRef.current = { x: clientX, y: clientY };
+
     for (let i = 0; i < items.length; i += 1) {
       const rect = items[i].rect;
-      const midY = rect.top + rect.height / 2;
-      const midX = rect.left + rect.width / 2;
-      if (clientY < midY - 4) return i;
-      if (Math.abs(clientY - midY) <= rect.height / 2 && clientX < midX) return i;
+      const rowThresholdDown = rect.top + rect.height * 0.7;
+      const rowThresholdUp = rect.top + rect.height * 0.3;
+      const rowThreshold = movingDown
+        ? rowThresholdDown
+        : movingUp
+        ? rowThresholdUp
+        : rect.top + rect.height / 2;
+      if (clientY < rowThreshold) {
+        const colThresholdRight = rect.left + rect.width * 0.7;
+        const colThresholdLeft = rect.left + rect.width * 0.3;
+        const colThreshold = movingRight
+          ? colThresholdRight
+          : movingLeft
+          ? colThresholdLeft
+          : rect.left + rect.width / 2;
+        return clientX < colThreshold ? i : i + 1;
+      }
     }
     return items.length;
   };
@@ -231,6 +253,7 @@ const Home = () => {
     setDragOverIndex(null);
     setDragPlaceholderHeight(null);
     setDragHiddenProjectId(null);
+    lastPointerRef.current = { x: null, y: null };
     pendingDragOverIndex.current = null;
     if (dragOverRaf.current) {
       cancelAnimationFrame(dragOverRaf.current);
@@ -250,6 +273,7 @@ const Home = () => {
     setDragOverIndex(null);
     setDragPlaceholderHeight(null);
     setDragHiddenProjectId(null);
+    lastPointerRef.current = { x: null, y: null };
     pendingDragOverIndex.current = null;
     if (dragOverRaf.current) {
       cancelAnimationFrame(dragOverRaf.current);

@@ -68,6 +68,7 @@ const Project = () => {
   const dragOverIndexRef = useRef(null);
   const orderedIdsRef = useRef([]);
   const dragHiddenRaf = useRef(null);
+  const lastPointerYRef = useRef(null);
 
   useEffect(() => {
     if (!authReady) return;
@@ -98,6 +99,7 @@ const Project = () => {
   }, [projects, draggingProjectId, dragOverIndex]);
 
   useLayoutEffect(() => {
+    if (draggingProjectId) return;
     const nextPositions = new Map();
     sidebarRefs.current.forEach((node, id) => {
       if (!node) return;
@@ -120,7 +122,7 @@ const Project = () => {
       }
     });
     prevSidebarPositions.current = nextPositions;
-  }, [renderProjects]);
+  }, [renderProjects, draggingProjectId]);
 
   useEffect(() => {
     dragOverIndexRef.current = dragOverIndex;
@@ -140,17 +142,22 @@ const Project = () => {
     items.sort((a, b) => a.rect.top - b.rect.top);
     orderedIdsRef.current = items.map((item) => item.id);
     const buffer = 10;
+    const lastY = lastPointerYRef.current ?? clientY;
+    const movingDown = clientY > lastY + 1;
+    const movingUp = clientY < lastY - 1;
+    lastPointerYRef.current = clientY;
     for (let i = 0; i < items.length; i += 1) {
       const rect = items[i].rect;
       const midY = rect.top + rect.height / 2;
       const hysteresisZone = Math.max(buffer, rect.height * 0.25);
-      if (clientY < midY - hysteresisZone) return i;
-      if (
-        Math.abs(clientY - midY) <= hysteresisZone &&
-        dragOverIndexRef.current !== null
-      ) {
-        return dragOverIndexRef.current;
-      }
+      const downThreshold = rect.top + rect.height * 0.7 + hysteresisZone * 0.1;
+      const upThreshold = rect.top + rect.height * 0.3 - hysteresisZone * 0.1;
+      const threshold = movingDown
+        ? downThreshold
+        : movingUp
+        ? upThreshold
+        : midY;
+      if (clientY < threshold) return i;
     }
     return items.length;
   };
@@ -302,6 +309,7 @@ const Project = () => {
     setDragOverIndex(null);
     setDragPlaceholderHeight(null);
     setDragHiddenProjectId(null);
+    lastPointerYRef.current = null;
     pendingDragOverIndex.current = null;
     if (dragOverRaf.current) {
       cancelAnimationFrame(dragOverRaf.current);
@@ -321,6 +329,7 @@ const Project = () => {
     setDragOverIndex(null);
     setDragPlaceholderHeight(null);
     setDragHiddenProjectId(null);
+    lastPointerYRef.current = null;
     pendingDragOverIndex.current = null;
     if (dragOverRaf.current) {
       cancelAnimationFrame(dragOverRaf.current);
