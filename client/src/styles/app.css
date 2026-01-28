@@ -124,6 +124,64 @@ body {
     border-color 160ms ease;
 }
 
+.reminder-item {
+  cursor: default;
+  align-items: flex-start;
+}
+
+.reminder-content {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.reminder-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.reminder-meta {
+  font-size: 11px;
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.reminder-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.actions-row.reminder-offset-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+}
+
+.reminder-offset-field {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12px;
+  color: #cbd5f5;
+}
+
+.reminder-offset-field .reminder-offset-input {
+  width: 72px;
+  flex: 0 0 72px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  color: var(--text);
+}
+
+.reminder-offset-label {
+  color: var(--text);
+  font-weight: 600;
+  display: inline-block;
+  margin-left: 6px;
+}
+
 .sidebar-item.active {
   border-color: rgba(59, 130, 246, 0.45);
   background: rgba(59, 130, 246, 0.14);
@@ -519,7 +577,8 @@ body {
 }
 
 .field input,
-.field textarea {
+.field textarea,
+.field select {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 14px;

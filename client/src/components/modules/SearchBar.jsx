@@ -2,7 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 
 const SearchBar = ({
-  label = "Search (shell only)",
+  label = "Search",
   value,
   onChange,
   placeholder = "Search...",

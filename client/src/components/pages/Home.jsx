@@ -5,6 +5,14 @@ import { UserContext } from "../App";
 import Brand from "../modules/Brand";
 import SearchBar from "../modules/SearchBar";
 import AuthControls from "../modules/AuthControls";
+import ReminderModal from "../modules/ReminderModal";
+import { socket } from "../../client-socket";
+import {
+  formatReminderDueAt,
+  formatReminderTitle,
+  getReminderId,
+  isReminderDue,
+} from "../../utilities/reminders";
 import {
   applyProjectOrder,
   insertProjectOrder,
@@ -21,6 +29,8 @@ const Home = () => {
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [dragPlaceholderHeight, setDragPlaceholderHeight] = useState(null);
   const [dragHiddenProjectId, setDragHiddenProjectId] = useState(null);
+  const [now, setNow] = useState(() => new Date());
+  const [reminderModalState, setReminderModalState] = useState(null);
   const cardRefs = useRef(new Map());
   const prevPositions = useRef(new Map());
   const didDropRef = useRef(false);
@@ -46,7 +56,90 @@ const Home = () => {
       });
   }, [user, authReady]);
 
-  const reminders = projects.flatMap((project) => project.reminders || []);
+  useEffect(() => {
+    if (!user) return;
+    const handleReminderUpdate = (payload) => {
+      if (!payload?.projectId || !payload?.reminder) return;
+      const mergeReminder = (reminders) => {
+        const next = [...(reminders || [])];
+        const id = payload.reminder?._id ? String(payload.reminder._id) : null;
+        if (!id) return next;
+        const existingIndex = next.findIndex(
+          (reminder) => reminder && String(reminder._id) === id
+        );
+        if (existingIndex >= 0) {
+          next[existingIndex] = payload.reminder;
+          return next.filter((reminder, index) => {
+            if (!reminder || String(reminder._id) !== id) return true;
+            return index === existingIndex;
+          });
+        }
+        return [...next, payload.reminder];
+      };
+      setProjects((prev) =>
+        prev.map((item) => {
+          if (String(item._id) !== String(payload.projectId)) return item;
+          return { ...item, reminders: mergeReminder(item.reminders) };
+        })
+      );
+    };
+    const handleReminderDue = () => {
+      setNow(new Date());
+    };
+
+    socket.on("reminder:updated", handleReminderUpdate);
+    socket.on("reminder:due", handleReminderDue);
+    return () => {
+      socket.off("reminder:updated", handleReminderUpdate);
+      socket.off("reminder:due", handleReminderDue);
+    };
+  }, [user]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const dueReminders = useMemo(() => {
+    return projects
+      .flatMap((project) =>
+        (project.reminders || []).map((reminder) => ({
+          reminder,
+          projectId: project._id,
+          projectTitle: project.title,
+        }))
+      )
+      .filter(({ reminder }) => isReminderDue(reminder, now));
+  }, [projects, now]);
+
+  const normalizeUrl = (rawUrl) => {
+    if (!rawUrl) return "";
+    const trimmed = String(rawUrl).trim();
+    if (!trimmed) return "";
+    if (trimmed === "https://" || trimmed === "http://") return "";
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `https://${trimmed}`;
+  };
+
+  const handleDismissReminder = (entry) => {
+    if (!entry) return;
+    const reminderId = getReminderId(entry.reminder);
+    if (!reminderId) return;
+    post(`/api/projects/${entry.projectId}/reminders/${reminderId}/dismiss`)
+      .then((updated) => {
+        setProjects((prev) =>
+          prev.map((project) => {
+            if (String(project._id) !== String(entry.projectId)) return project;
+            const reminders = (project.reminders || []).map((item) => {
+              if (!item || String(item._id) !== String(updated._id)) return item;
+              return { ...item, dismissedAt: updated.dismissedAt };
+            });
+            return { ...project, reminders };
+          })
+        );
+      })
+      .finally(() => setReminderModalState(null));
+  };
   const placeholderId = "__placeholder__";
   const renderProjects = useMemo(() => {
     if (!draggingProjectId || dragOverIndex === null) {
@@ -294,21 +387,41 @@ const Home = () => {
   };
 
   return (
-    <div className="layout">
+    <>
+      <div className="layout">
       <aside className="sidebar">
         <Brand subtitle="Project hub" />
 
         <div>
           <div className="section-title">Reminders</div>
           <div className="sidebar-list">
-            {reminders.length === 0 && (
+            {dueReminders.length === 0 && (
               <div className="sidebar-reminder">No reminders yet.</div>
             )}
-            {reminders.map((reminder, idx) => (
-              <div className="sidebar-item" key={`${reminder}-${idx}`}>
-                {reminder}
-              </div>
-            ))}
+            {dueReminders.map((entry, idx) => {
+              const reminderId = getReminderId(entry.reminder, `${entry.projectId}-${idx}`);
+              return (
+                <div className="sidebar-item reminder-item" key={reminderId}>
+                  <div className="reminder-content">
+                    <div className="reminder-title">
+                      {formatReminderTitle(entry.reminder, entry.projectTitle)}
+                    </div>
+                    <div className="reminder-meta">
+                      {formatReminderDueAt(entry.reminder)}
+                    </div>
+                  </div>
+                  <div className="reminder-actions">
+                    <button
+                      className="button ghost small"
+                      type="button"
+                      onClick={() => setReminderModalState(entry)}
+                    >
+                      View
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </aside>
@@ -416,6 +529,30 @@ const Home = () => {
         </div>
       </main>
     </div>
+      <ReminderModal
+        isOpen={Boolean(reminderModalState)}
+        title={
+          reminderModalState
+            ? formatReminderTitle(
+                reminderModalState.reminder,
+                reminderModalState.projectTitle
+              )
+            : ""
+        }
+      subtitle={
+        reminderModalState ? formatReminderDueAt(reminderModalState.reminder) : ""
+      }
+      note={reminderModalState?.reminder?.note}
+      onClose={() => setReminderModalState(null)}
+      onDismiss={() => handleDismissReminder(reminderModalState)}
+      onOpenResource={() => {
+        if (!reminderModalState) return;
+        navigate(`/project/${reminderModalState.projectId}`, {
+          state: { resourceId: reminderModalState.reminder?.resourceId },
+        });
+      }}
+    />
+    </>
   );
 };
 

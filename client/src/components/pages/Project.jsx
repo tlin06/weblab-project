@@ -6,7 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { get, post } from "../../utilities";
 import { UserContext } from "../App";
 import Brand from "../modules/Brand";
@@ -17,10 +17,18 @@ import TabPanel from "../modules/TabPanel";
 import AuthControls from "../modules/AuthControls";
 import ConfirmModal from "../modules/ConfirmModal";
 import StatusPill from "../modules/StatusPill";
+import ReminderModal from "../modules/ReminderModal";
+import { socket } from "../../client-socket";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
+import {
+  formatReminderDueAt,
+  formatReminderTitle,
+  getReminderId,
+  isReminderDue,
+} from "../../utilities/reminders";
 import {
   applyProjectOrder,
   applyResourceOrder,
@@ -38,6 +46,7 @@ import {
 const Project = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, authReady } = useContext(UserContext);
   const [projects, setProjects] = useState([]);
   const [project, setProject] = useState(null);
@@ -93,6 +102,19 @@ const Project = () => {
     isOpen: false,
     title: "",
   });
+  const [reminderCreateState, setReminderCreateState] = useState({
+    isOpen: false,
+    mode: "exact",
+    exactTime: "",
+    offsetDays: 0,
+    offsetHours: 0,
+    offsetMinutes: 30,
+    offsetSeconds: 0,
+    note: "",
+    error: "",
+  });
+  const [reminderModalState, setReminderModalState] = useState(null);
+  const [now, setNow] = useState(() => new Date());
   const [draggingProjectId, setDraggingProjectId] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [dragPlaceholderHeight, setDragPlaceholderHeight] = useState(null);
@@ -117,6 +139,54 @@ const Project = () => {
     }
     get("/api/projects").then((data) => setProjects(applyProjectOrder(data)));
   }, [user, authReady]);
+
+  useEffect(() => {
+    if (!user) return;
+    const handleReminderUpdate = (payload) => {
+      if (!payload?.projectId || !payload?.reminder) return;
+      const mergeReminder = (reminders) => {
+        const next = [...(reminders || [])];
+        const id = payload.reminder?._id ? String(payload.reminder._id) : null;
+        if (!id) return next;
+        const existingIndex = next.findIndex(
+          (reminder) => reminder && String(reminder._id) === id
+        );
+        if (existingIndex >= 0) {
+          next[existingIndex] = payload.reminder;
+          return next.filter((reminder, index) => {
+            if (!reminder || String(reminder._id) !== id) return true;
+            return index === existingIndex;
+          });
+        }
+        return [...next, payload.reminder];
+      };
+      setProjects((prev) =>
+        prev.map((item) => {
+          if (String(item._id) !== String(payload.projectId)) return item;
+          return { ...item, reminders: mergeReminder(item.reminders) };
+        })
+      );
+      setProject((prev) => {
+        if (!prev || String(prev._id) !== String(payload.projectId)) return prev;
+        return { ...prev, reminders: mergeReminder(prev.reminders) };
+      });
+    };
+    const handleReminderDue = () => {
+      setNow(new Date());
+    };
+
+    socket.on("reminder:updated", handleReminderUpdate);
+    socket.on("reminder:due", handleReminderDue);
+    return () => {
+      socket.off("reminder:updated", handleReminderUpdate);
+      socket.off("reminder:due", handleReminderDue);
+    };
+  }, [user]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   const placeholderId = "__placeholder__";
   const renderProjects = useMemo(() => {
@@ -233,10 +303,20 @@ const Project = () => {
       } else {
         setSelectedResourceId(null);
       }
+      const requestedResourceId = location?.state?.resourceId;
+      if (requestedResourceId) {
+        const match = orderedResources.find(
+          (resource) => String(resource._id) === String(requestedResourceId)
+        );
+        if (match) {
+          setSelectedResourceId(String(match._id));
+          setActiveDetail("resource");
+        }
+      }
       const firstTab = nextTabGroups[0]?.links?.[0];
       setSelectedTabKey(firstTab?._id ? String(firstTab._id) : null);
     });
-  }, [projectId, user, authReady]);
+  }, [projectId, user, authReady, location?.state?.resourceId]);
 
   const handleSaveProject = () => {
     if (!projectId) return;
@@ -408,6 +488,18 @@ const Project = () => {
     );
   }, [project, selectedResourceId]);
 
+  const dueReminders = useMemo(() => {
+    return projects
+      .flatMap((item) =>
+        (item.reminders || []).map((reminder) => ({
+          reminder,
+          projectId: item._id,
+          projectTitle: item.title,
+        }))
+      )
+      .filter(({ reminder }) => isReminderDue(reminder, now));
+  }, [projects, now]);
+
   const orderedResources = useMemo(
     () => applyResourceOrder(projectId, project?.resources || []),
     [projectId, project?.resources]
@@ -542,6 +634,28 @@ const Project = () => {
       return `\n\n$$\n${trimmed}\n$$\n\n`;
     });
   }, [resourceDraft.notes]);
+
+  useEffect(() => {
+    if (!isNotesExpanded) return;
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setIsNotesExpanded(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isNotesExpanded]);
+
+  useEffect(() => {
+    if (!reminderCreateState.isOpen) return;
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setReminderCreateState((prev) => ({ ...prev, isOpen: false, error: "" }));
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [reminderCreateState.isOpen]);
 
   const handleConfirmAddResource = () => {
     if (!project) return;
@@ -695,10 +809,163 @@ const Project = () => {
   const normalizeUrl = (rawUrl) => {
     const trimmed = (rawUrl || "").trim();
     if (!trimmed) return "";
+    if (trimmed === "https://" || trimmed === "http://") return "";
     if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
       return trimmed;
     }
     return `https://${trimmed}`;
+  };
+
+  const openReminderResource = (entry) => {
+    const reminder = entry?.reminder || entry;
+    if (!reminder?.resourceId) return;
+    const targetProjectId = entry?.projectId || projectId;
+    if (String(targetProjectId) !== String(projectId)) {
+      navigate(`/project/${targetProjectId}`, {
+        state: { resourceId: reminder.resourceId },
+      });
+      setReminderModalState(null);
+      return;
+    }
+    setSelectedResourceId(String(reminder.resourceId));
+    setActiveDetail("resource");
+    setReminderModalState(null);
+  };
+
+  const formatLocalDateTime = (date) => {
+    const pad = (value) => String(value).padStart(2, "0");
+    const year = date.getFullYear();
+    const month = pad(date.getMonth() + 1);
+    const day = pad(date.getDate());
+    const hours = pad(date.getHours());
+    const minutes = pad(date.getMinutes());
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  const openReminderCreate = () => {
+    if (!selectedResource) return;
+    const defaultDate = new Date(Date.now() + 30 * 60 * 1000);
+    setReminderCreateState({
+      isOpen: true,
+      mode: "exact",
+      exactTime: formatLocalDateTime(defaultDate),
+      offsetDays: 0,
+      offsetHours: 0,
+      offsetMinutes: 30,
+      offsetSeconds: 0,
+      note: "",
+      error: "",
+    });
+  };
+
+  const handleConfirmReminder = () => {
+    if (!projectId || !selectedResource) return;
+    let dueDate = null;
+    if (reminderCreateState.mode === "exact") {
+      dueDate = new Date(reminderCreateState.exactTime);
+    } else {
+      const days = Number(reminderCreateState.offsetDays) || 0;
+      const hours = Number(reminderCreateState.offsetHours) || 0;
+      const minutes = Number(reminderCreateState.offsetMinutes) || 0;
+      const seconds = Number(reminderCreateState.offsetSeconds) || 0;
+      const totalMs =
+        days * 24 * 60 * 60 * 1000 +
+        hours * 60 * 60 * 1000 +
+        minutes * 60 * 1000 +
+        seconds * 1000;
+      if (totalMs <= 0) {
+        setReminderCreateState((prev) => ({
+          ...prev,
+          error: "Enter a positive time amount.",
+        }));
+        return;
+      }
+      dueDate = new Date(Date.now() + totalMs);
+    }
+    if (!dueDate || Number.isNaN(dueDate.getTime())) {
+      setReminderCreateState((prev) => ({
+        ...prev,
+        error: "Pick a valid reminder time.",
+      }));
+      return;
+    }
+
+    post(`/api/projects/${projectId}/reminders`, {
+      resourceId: selectedResource._id,
+      dueAt: dueDate,
+      note: reminderCreateState.note,
+    })
+      .then((reminder) => {
+        const mergeReminder = (reminders) => {
+          const next = [...(reminders || [])];
+          const id = reminder?._id ? String(reminder._id) : null;
+          if (!id) return next;
+          const existingIndex = next.findIndex(
+            (item) => item && String(item._id) === id
+          );
+          if (existingIndex >= 0) {
+            next[existingIndex] = reminder;
+            return next;
+          }
+          return [...next, reminder];
+        };
+        setProject((prev) =>
+          prev
+            ? { ...prev, reminders: mergeReminder(prev.reminders) }
+            : prev
+        );
+        setProjects((prev) =>
+          prev.map((item) => {
+            if (String(item._id) !== String(projectId)) return item;
+            return { ...item, reminders: mergeReminder(item.reminders) };
+          })
+        );
+        setReminderCreateState({
+          isOpen: false,
+          mode: "exact",
+          exactTime: "",
+          offsetDays: 0,
+          offsetHours: 0,
+          offsetMinutes: 30,
+          offsetSeconds: 0,
+          note: "",
+          error: "",
+        });
+      })
+      .catch(() => {
+        setReminderCreateState((prev) => ({
+          ...prev,
+          error: "Reminder save failed. Try again.",
+        }));
+      });
+  };
+
+  const handleDismissReminder = (entry) => {
+    if (!entry?.reminder || !entry?.projectId) return;
+    const reminderId = getReminderId(entry.reminder);
+    if (!reminderId) return;
+    post(`/api/projects/${entry.projectId}/reminders/${reminderId}/dismiss`)
+      .then((updated) => {
+        setProject((prev) => {
+          if (!prev || String(prev._id) !== String(entry.projectId)) return prev;
+          const reminders = (prev.reminders || []).map((item) => {
+            if (!item || String(item._id) !== String(updated._id)) return item;
+            return { ...item, dismissedAt: updated.dismissedAt };
+          });
+          return { ...prev, reminders };
+        });
+        setProjects((prev) =>
+          prev.map((item) => {
+            if (String(item._id) !== String(entry.projectId)) return item;
+            const reminders = (item.reminders || []).map((reminder) => {
+              if (!reminder || String(reminder._id) !== String(updated._id)) return reminder;
+              return { ...reminder, dismissedAt: updated.dismissedAt };
+            });
+            return { ...item, reminders };
+          })
+        );
+      })
+      .finally(() => setReminderModalState(null));
   };
 
   const handleReorderResources = (nextResources) => {
@@ -731,7 +998,14 @@ const Project = () => {
         }}
       />
       {isNotesExpanded && (
-        <div className="modal-backdrop">
+        <div
+          className="modal-backdrop"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setIsNotesExpanded(false);
+            }
+          }}
+        >
           <div className="modal notes-modal">
             <div className="modal-title">
               Notes: {resourceDraft.title || selectedResource?.title || "Untitled Resource"}
@@ -850,6 +1124,180 @@ const Project = () => {
           </div>
         </div>
       )}
+      {reminderCreateState.isOpen && (
+        <div
+          className="modal-backdrop"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setReminderCreateState((prev) => ({ ...prev, isOpen: false, error: "" }));
+            }
+          }}
+        >
+          <div className="modal">
+            <div className="modal-title">
+              Set Reminder{selectedResource?.title ? `: ${selectedResource.title}` : ""}
+            </div>
+            <div className="modal-body">
+              <div className="field" style={{ marginTop: 0 }}>
+                <label>Reminder type</label>
+                <select
+                  value={reminderCreateState.mode}
+                  onChange={(e) =>
+                    setReminderCreateState((prev) => ({
+                      ...prev,
+                      mode: e.target.value,
+                      error: "",
+                    }))
+                  }
+                >
+                  <option value="exact">Exact time</option>
+                  <option value="relative">In...</option>
+                </select>
+              </div>
+              {reminderCreateState.mode === "exact" ? (
+                <div className="field">
+                  <label>Exact time</label>
+                  <input
+                    type="datetime-local"
+                    value={reminderCreateState.exactTime}
+                    onChange={(e) =>
+                      setReminderCreateState((prev) => ({
+                        ...prev,
+                        exactTime: e.target.value,
+                        error: "",
+                      }))
+                    }
+                  />
+                </div>
+              ) : (
+                <div className="field">
+                  <label>In</label>
+                  <div className="actions-row reminder-offset-row" style={{ marginTop: 0 }}>
+                    <label className="reminder-offset-field">
+                      <input
+                        className="reminder-offset-input"
+                        type="number"
+                        min="0"
+                        value={reminderCreateState.offsetDays}
+                        onChange={(e) =>
+                          setReminderCreateState((prev) => ({
+                            ...prev,
+                            offsetDays: e.target.value,
+                            error: "",
+                          }))
+                        }
+                      />
+                      <span className="reminder-offset-label">Days</span>
+                    </label>
+                    <label className="reminder-offset-field">
+                      <input
+                        className="reminder-offset-input"
+                        type="number"
+                        min="0"
+                        value={reminderCreateState.offsetHours}
+                        onChange={(e) =>
+                          setReminderCreateState((prev) => ({
+                            ...prev,
+                            offsetHours: e.target.value,
+                            error: "",
+                          }))
+                        }
+                      />
+                      <span className="reminder-offset-label">Hours</span>
+                    </label>
+                    <label className="reminder-offset-field">
+                      <input
+                        className="reminder-offset-input"
+                        type="number"
+                        min="0"
+                        value={reminderCreateState.offsetMinutes}
+                        onChange={(e) =>
+                          setReminderCreateState((prev) => ({
+                            ...prev,
+                            offsetMinutes: e.target.value,
+                            error: "",
+                          }))
+                        }
+                      />
+                      <span className="reminder-offset-label">Minutes</span>
+                    </label>
+                    <label className="reminder-offset-field">
+                      <input
+                        className="reminder-offset-input"
+                        type="number"
+                        min="0"
+                        value={reminderCreateState.offsetSeconds}
+                        onChange={(e) =>
+                          setReminderCreateState((prev) => ({
+                            ...prev,
+                            offsetSeconds: e.target.value,
+                            error: "",
+                          }))
+                        }
+                      />
+                      <span className="reminder-offset-label">Seconds</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+              <div className="field">
+                <label>Note</label>
+                <textarea
+                  rows="3"
+                  value={reminderCreateState.note}
+                  onChange={(e) =>
+                    setReminderCreateState((prev) => ({
+                      ...prev,
+                      note: e.target.value,
+                    }))
+                  }
+                  placeholder="Add a quick note..."
+                />
+              </div>
+              {reminderCreateState.error && (
+                <div className="empty-state">{reminderCreateState.error}</div>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button
+                className="button ghost"
+                type="button"
+                onClick={() =>
+                  setReminderCreateState((prev) => ({ ...prev, isOpen: false, error: "" }))
+                }
+              >
+                Cancel
+              </button>
+              <button className="button" type="button" onClick={handleConfirmReminder}>
+                Set Reminder
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <ReminderModal
+        isOpen={Boolean(reminderModalState)}
+        title={
+          reminderModalState
+            ? formatReminderTitle(
+                reminderModalState.reminder,
+                reminderModalState.projectTitle
+              )
+            : ""
+        }
+        subtitle={
+          reminderModalState
+            ? formatReminderDueAt(reminderModalState.reminder)
+            : ""
+        }
+        note={reminderModalState?.reminder?.note}
+        onClose={() => setReminderModalState(null)}
+        onDismiss={() => handleDismissReminder(reminderModalState)}
+        onOpenResource={() => {
+          if (!reminderModalState) return;
+          openReminderResource(reminderModalState);
+        }}
+      />
       <aside className="sidebar">
         <Brand subtitle="Project view" />
 
@@ -897,14 +1345,36 @@ const Project = () => {
         <div>
           <div className="section-title">Reminders</div>
           <div className="sidebar-list">
-            {(project?.reminders || []).length === 0 && (
+            {dueReminders.length === 0 && (
               <div className="sidebar-reminder">No reminders yet.</div>
             )}
-            {(project?.reminders || []).map((reminder, idx) => (
-              <div className="sidebar-item" key={`${reminder}-${idx}`}>
-                {reminder}
-              </div>
-            ))}
+            {dueReminders.map((entry, idx) => {
+              const reminderId = getReminderId(
+                entry.reminder,
+                `${entry.projectId}-${idx}`
+              );
+              return (
+                <div className="sidebar-item reminder-item" key={reminderId}>
+                  <div className="reminder-content">
+                    <div className="reminder-title">
+                      {formatReminderTitle(entry.reminder, entry.projectTitle)}
+                    </div>
+                    <div className="reminder-meta">
+                      {formatReminderDueAt(entry.reminder)}
+                    </div>
+                  </div>
+                  <div className="reminder-actions">
+                    <button
+                      className="button ghost small"
+                      type="button"
+                      onClick={() => setReminderModalState(entry)}
+                    >
+                      View
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </aside>
@@ -1127,9 +1597,9 @@ const Project = () => {
                       Open Link
                     </button>
                     <button
-                      className="button ghost"
+                      className="button"
                       type="button"
-                      onClick={() => window.alert("Reminder feature coming soon.")}
+                      onClick={openReminderCreate}
                     >
                       Set Reminder
                     </button>
