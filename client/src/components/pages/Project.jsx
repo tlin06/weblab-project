@@ -306,6 +306,7 @@ const Project = () => {
         setSelectedResourceId(null);
       }
       const requestedResourceId = location?.state?.resourceId;
+      const requestedTabId = location?.state?.tabId;
       if (requestedResourceId) {
         const match = orderedResources.find(
           (resource) => String(resource._id) === String(requestedResourceId)
@@ -316,9 +317,19 @@ const Project = () => {
         }
       }
       const firstTab = nextTabGroups[0]?.links?.[0];
-      setSelectedTabKey(firstTab?._id ? String(firstTab._id) : null);
+      const requestedTabMatch = requestedTabId
+        ? nextTabGroups[0]?.links?.find(
+            (link) => String(link._id) === String(requestedTabId)
+          )
+        : null;
+      if (requestedTabMatch) {
+        setSelectedTabKey(String(requestedTabMatch._id));
+        setActiveDetail("tab");
+      } else {
+        setSelectedTabKey(firstTab?._id ? String(firstTab._id) : null);
+      }
     });
-  }, [projectId, user, authReady, location?.state?.resourceId]);
+  }, [projectId, user, authReady, location?.state?.resourceId, location?.state?.tabId]);
 
   const handleSaveProject = () => {
     if (!projectId) return;

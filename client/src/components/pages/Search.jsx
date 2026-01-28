@@ -190,11 +190,11 @@ const Search = () => {
 
                   <section className="panel search-panel">
                     <div className="panel-header">
-                      <div className="panel-title">Links</div>
+                      <div className="panel-title">Tabs</div>
                     </div>
                     <div className="search-panel-body">
                       {linkResults.length === 0 ? (
-                        <div className="empty-state">No matching links.</div>
+                        <div className="empty-state">No matching tabs.</div>
                       ) : (
                         linkResults.map((link) => (
                           <div
@@ -202,9 +202,16 @@ const Search = () => {
                             className="search-item"
                             role="button"
                             tabIndex={0}
-                            onClick={() => navigate(`/project/${link.projectId}`)}
+                            onClick={() =>
+                              navigate(`/project/${link.projectId}`, {
+                                state: { tabId: link._id },
+                              })
+                            }
                             onKeyDown={(event) => {
-                              if (event.key === "Enter") navigate(`/project/${link.projectId}`);
+                              if (event.key === "Enter")
+                                navigate(`/project/${link.projectId}`, {
+                                  state: { tabId: link._id },
+                                });
                             }}
                           >
                             <div className="search-item-title">{link.title || "Untitled link"}</div>
