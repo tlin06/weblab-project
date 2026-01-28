@@ -377,12 +377,22 @@ body {
   padding: 14px;
 }
 
+.panel-aligned {
+  margin: 16px 18px 0;
+}
+
 .panel-header {
   display: flex;
   justify-content: space-between;
   gap: 10px;
   align-items: center;
   margin-bottom: 12px;
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .panel-title {

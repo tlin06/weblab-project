@@ -13,7 +13,7 @@ const Search = () => {
         <header className="topbar">
           <div>
             <div className="topbar-title">Search</div>
-            <div className="sidebar-reminder">Search page placeholder.</div>
+            <div className="topbar-description">Search page placeholder.</div>
           </div>
           <SearchBar />
         </header>

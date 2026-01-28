@@ -317,7 +317,7 @@ const Home = () => {
         <header className="topbar">
           <div>
             <div className="topbar-title">Projects</div>
-            <div className="sidebar-reminder">Track resources, tabs, and notes.</div>
+            <div className="topbar-description">Track resources, tabs, and notes.</div>
           </div>
           <div className="topbar-actions">
             <SearchBar />
@@ -325,7 +325,7 @@ const Home = () => {
           </div>
         </header>
 
-        <section className="panel" style={{ marginBottom: "16px" }}>
+        <section className="panel panel-aligned">
           <div className="panel-header">
             <div className="panel-title">Add a new project</div>
             <button

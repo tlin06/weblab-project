@@ -44,8 +44,7 @@ const Project = () => {
     purpose: null,
     url: null,
   });
-  const [resourceSaveStatus, setResourceSaveStatus] = useState("");
-  const resourceStatusTimer = useRef(null);
+  const [resourceSaveStatus, setResourceSaveStatus] = useState("Saved");
   const [selectedTabKey, setSelectedTabKey] = useState(null);
   const [activeDetail, setActiveDetail] = useState("resource");
   const [tabDraft, setTabDraft] = useState({ title: "", url: "" });
@@ -53,9 +52,17 @@ const Project = () => {
     title: null,
     url: null,
   });
-  const [tabSaveStatus, setTabSaveStatus] = useState("");
-  const tabStatusTimer = useRef(null);
+  const [tabSaveStatus, setTabSaveStatus] = useState("Saved");
   const [confirmState, setConfirmState] = useState(null);
+  const [resourceCreateState, setResourceCreateState] = useState({
+    isOpen: false,
+    title: "",
+    purpose: "",
+  });
+  const [tabCreateState, setTabCreateState] = useState({
+    isOpen: false,
+    title: "",
+  });
   const [draggingProjectId, setDraggingProjectId] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [dragPlaceholderHeight, setDragPlaceholderHeight] = useState(null);
@@ -69,6 +76,8 @@ const Project = () => {
   const orderedIdsRef = useRef([]);
   const dragHiddenRaf = useRef(null);
   const lastPointerYRef = useRef(null);
+  const prevSelectedResourceId = useRef(null);
+  const prevSelectedTabKey = useRef(null);
 
   useEffect(() => {
     if (!authReady) return;
@@ -366,8 +375,11 @@ const Project = () => {
         url: selectedResource.url || "",
       });
       setSaveError("");
-      setResourceSaveStatus("");
+      if (prevSelectedResourceId.current !== selectedResourceId) {
+        setResourceSaveStatus("Saved");
+      }
     }
+    prevSelectedResourceId.current = selectedResourceId;
   }, [selectedResource]);
 
   const tabGroup = project?.tabGroups?.[0] || null;
@@ -384,20 +396,17 @@ const Project = () => {
         title: selectedTab.title || "",
         url: selectedTab.url || "",
       });
-      setTabSaveStatus("");
+      if (prevSelectedTabKey.current !== selectedTabKey) {
+        setTabSaveStatus("Saved");
+      }
     }
+    prevSelectedTabKey.current = selectedTabKey;
   }, [selectedTab]);
 
   useEffect(() => {
     return () => {
       if (notesSaveTimer.current) {
         clearTimeout(notesSaveTimer.current);
-      }
-      if (resourceStatusTimer.current) {
-        clearTimeout(resourceStatusTimer.current);
-      }
-      if (tabStatusTimer.current) {
-        clearTimeout(tabStatusTimer.current);
       }
       Object.values(resourceSaveTimers.current).forEach((timer) => {
         if (timer) clearTimeout(timer);
@@ -410,41 +419,26 @@ const Project = () => {
 
   const markResourceSaving = () => {
     setResourceSaveStatus("Saving...");
-    if (resourceStatusTimer.current) clearTimeout(resourceStatusTimer.current);
   };
 
   const markResourceSaved = () => {
     setResourceSaveStatus("Saved");
-    if (resourceStatusTimer.current) clearTimeout(resourceStatusTimer.current);
-    resourceStatusTimer.current = setTimeout(() => {
-      setResourceSaveStatus("");
-    }, 1200);
   };
 
   const markTabSaving = () => {
     setTabSaveStatus("Saving...");
-    if (tabStatusTimer.current) clearTimeout(tabStatusTimer.current);
   };
 
   const markTabSaved = () => {
     setTabSaveStatus("Saved");
-    if (tabStatusTimer.current) clearTimeout(tabStatusTimer.current);
-    tabStatusTimer.current = setTimeout(() => {
-      setTabSaveStatus("");
-    }, 1200);
   };
 
   const handleAddResource = () => {
     if (!project) return;
-    post(`/api/projects/${projectId}/resources`, {
-      title: "New Resource",
-      url: "https://",
-    }).then((resource) => {
-      setProject((prev) => ({
-        ...prev,
-        resources: [resource, ...(prev?.resources || [])],
-      }));
-      setSelectedResourceId(String(resource._id));
+    setResourceCreateState({
+      isOpen: true,
+      title: "",
+      purpose: "",
     });
   };
 
@@ -473,6 +467,34 @@ const Project = () => {
 
   const handleAddTab = () => {
     if (!project) return;
+    setTabCreateState({
+      isOpen: true,
+      title: "",
+    });
+  };
+
+  const handleConfirmAddResource = () => {
+    if (!project) return;
+    const title = resourceCreateState.title.trim() || "New Resource";
+    const purpose = resourceCreateState.purpose.trim();
+    post(`/api/projects/${projectId}/resources`, {
+      title,
+      purpose,
+      url: "https://",
+    }).then((resource) => {
+      setProject((prev) => ({
+        ...prev,
+        resources: [resource, ...(prev?.resources || [])],
+      }));
+      setSelectedResourceId(String(resource._id));
+      setActiveDetail("resource");
+      setResourceCreateState({ isOpen: false, title: "", purpose: "" });
+    });
+  };
+
+  const handleConfirmAddTab = () => {
+    if (!project) return;
+    const title = tabCreateState.title.trim() || "New Tab";
     const existingGroup = (project.tabGroups || [])[0];
     const ensureGroup = existingGroup
       ? Promise.resolve(existingGroup)
@@ -480,7 +502,7 @@ const Project = () => {
 
     ensureGroup.then((tabGroup) => {
       post(`/api/tabgroups/${tabGroup._id}/links`, {
-        title: "New Tab",
+        title,
         url: "https://",
       }).then((updated) => {
         setProject((prev) => {
@@ -499,6 +521,7 @@ const Project = () => {
           setSelectedTabKey(String(newLink._id));
           setActiveDetail("tab");
         }
+        setTabCreateState({ isOpen: false, title: "" });
       });
     });
   };
@@ -615,6 +638,78 @@ const Project = () => {
           if (action) action();
         }}
       />
+      {resourceCreateState.isOpen && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="modal-title">Add Resource</div>
+            <div className="modal-body">
+              <div className="field" style={{ marginTop: 0 }}>
+                <label>Title</label>
+                <input
+                  value={resourceCreateState.title}
+                  onChange={(e) =>
+                    setResourceCreateState((prev) => ({ ...prev, title: e.target.value }))
+                  }
+                  placeholder="Resource title"
+                />
+              </div>
+              <div className="field">
+                <label>Purpose</label>
+                <input
+                  value={resourceCreateState.purpose}
+                  onChange={(e) =>
+                    setResourceCreateState((prev) => ({ ...prev, purpose: e.target.value }))
+                  }
+                  placeholder="What is this for?"
+                />
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button
+                className="button ghost"
+                type="button"
+                onClick={() => setResourceCreateState({ isOpen: false, title: "", purpose: "" })}
+              >
+                Cancel
+              </button>
+              <button className="button" type="button" onClick={handleConfirmAddResource}>
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {tabCreateState.isOpen && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="modal-title">Add Link</div>
+            <div className="modal-body">
+              <div className="field" style={{ marginTop: 0 }}>
+                <label>Title</label>
+                <input
+                  value={tabCreateState.title}
+                  onChange={(e) =>
+                    setTabCreateState((prev) => ({ ...prev, title: e.target.value }))
+                  }
+                  placeholder="Link title"
+                />
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button
+                className="button ghost"
+                type="button"
+                onClick={() => setTabCreateState({ isOpen: false, title: "" })}
+              >
+                Cancel
+              </button>
+              <button className="button" type="button" onClick={handleConfirmAddTab}>
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <aside className="sidebar">
         <Brand subtitle="Project view" />
 
@@ -770,22 +865,24 @@ const Project = () => {
                 <div className="panel-title">
                   {activeDetail === "tab" ? "Tab Details" : "Resource Details"}
                 </div>
-                {activeDetail === "resource" && resourceSaveStatus && (
-                  <div className="status-pill">{resourceSaveStatus}</div>
-                )}
-                {activeDetail === "tab" && tabSaveStatus && (
-                  <div className="status-pill">{tabSaveStatus}</div>
-                )}
-                {activeDetail === "resource" && selectedResource && (
-                  <button className="button ghost" type="button" onClick={handleDeleteResource}>
-                    Delete
-                  </button>
-                )}
-                {activeDetail === "tab" && selectedTab && (
-                  <button className="button ghost" type="button" onClick={handleDeleteTab}>
-                    Delete
-                  </button>
-                )}
+                <div className="panel-actions">
+                  {activeDetail === "resource" && resourceSaveStatus && (
+                    <div className="status-pill">{resourceSaveStatus}</div>
+                  )}
+                  {activeDetail === "tab" && tabSaveStatus && (
+                    <div className="status-pill">{tabSaveStatus}</div>
+                  )}
+                  {activeDetail === "resource" && selectedResource && (
+                    <button className="button ghost" type="button" onClick={handleDeleteResource}>
+                      Delete
+                    </button>
+                  )}
+                  {activeDetail === "tab" && selectedTab && (
+                    <button className="button ghost" type="button" onClick={handleDeleteTab}>
+                      Delete
+                    </button>
+                  )}
+                </div>
               </div>
               {saveError && activeDetail === "resource" && (
                 <div className="empty-state">{saveError}</div>
