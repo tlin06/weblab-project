@@ -28,6 +28,7 @@ import {
   formatReminderTitle,
   getReminderId,
   isReminderDue,
+  parseReminderDate,
 } from "../../utilities/reminders";
 import {
   applyProjectOrder,
@@ -108,7 +109,7 @@ const Project = () => {
     exactTime: "",
     offsetDays: 0,
     offsetHours: 0,
-    offsetMinutes: 30,
+    offsetMinutes: 0,
     offsetSeconds: 0,
     note: "",
     error: "",
@@ -489,6 +490,10 @@ const Project = () => {
   }, [project, selectedResourceId]);
 
   const dueReminders = useMemo(() => {
+    const toTimestamp = (reminder) =>
+      parseReminderDate(reminder?.dueAt)?.getTime() ||
+      parseReminderDate(reminder?.createdAt)?.getTime() ||
+      0;
     return projects
       .flatMap((item) =>
         (item.reminders || []).map((reminder) => ({
@@ -497,7 +502,8 @@ const Project = () => {
           projectTitle: item.title,
         }))
       )
-      .filter(({ reminder }) => isReminderDue(reminder, now));
+      .filter(({ reminder }) => isReminderDue(reminder, now))
+      .sort((a, b) => toTimestamp(b.reminder) - toTimestamp(a.reminder));
   }, [projects, now]);
 
   const orderedResources = useMemo(
@@ -851,7 +857,7 @@ const Project = () => {
       exactTime: formatLocalDateTime(defaultDate),
       offsetDays: 0,
       offsetHours: 0,
-      offsetMinutes: 30,
+      offsetMinutes: 0,
       offsetSeconds: 0,
       note: "",
       error: "",
@@ -926,7 +932,7 @@ const Project = () => {
           exactTime: "",
           offsetDays: 0,
           offsetHours: 0,
-          offsetMinutes: 30,
+          offsetMinutes: 0,
           offsetSeconds: 0,
           note: "",
           error: "",
@@ -1125,14 +1131,7 @@ const Project = () => {
         </div>
       )}
       {reminderCreateState.isOpen && (
-        <div
-          className="modal-backdrop"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              setReminderCreateState((prev) => ({ ...prev, isOpen: false, error: "" }));
-            }
-          }}
-        >
+        <div className="modal-backdrop">
           <div className="modal">
             <div className="modal-title">
               Set Reminder{selectedResource?.title ? `: ${selectedResource.title}` : ""}
@@ -1243,6 +1242,7 @@ const Project = () => {
               <div className="field">
                 <label>Note</label>
                 <textarea
+                  className="reminder-note"
                   rows="3"
                   value={reminderCreateState.note}
                   onChange={(e) =>
@@ -1301,9 +1301,13 @@ const Project = () => {
       <aside className="sidebar">
         <Brand subtitle="Project view" />
 
-        <div>
+        <div className="sidebar-section sidebar-projects">
           <div className="section-title">Projects</div>
-          <div className="sidebar-list" onDragOver={handleDragOver} onDrop={handleDrop(null)}>
+          <div
+            className="sidebar-list sidebar-scroll"
+            onDragOver={handleDragOver}
+            onDrop={handleDrop(null)}
+          >
             {renderProjects.map((item) => {
               if (item.__placeholder) {
                 return (
@@ -1342,9 +1346,9 @@ const Project = () => {
           </div>
         </div>
 
-        <div>
+        <div className="sidebar-section sidebar-reminders">
           <div className="section-title">Reminders</div>
-          <div className="sidebar-list">
+          <div className="sidebar-list sidebar-scroll">
             {dueReminders.length === 0 && (
               <div className="sidebar-reminder">No reminders yet.</div>
             )}

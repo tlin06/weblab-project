@@ -12,6 +12,7 @@ import {
   formatReminderTitle,
   getReminderId,
   isReminderDue,
+  parseReminderDate,
 } from "../../utilities/reminders";
 import {
   applyProjectOrder,
@@ -101,6 +102,10 @@ const Home = () => {
   }, []);
 
   const dueReminders = useMemo(() => {
+    const toTimestamp = (reminder) =>
+      parseReminderDate(reminder?.dueAt)?.getTime() ||
+      parseReminderDate(reminder?.createdAt)?.getTime() ||
+      0;
     return projects
       .flatMap((project) =>
         (project.reminders || []).map((reminder) => ({
@@ -109,7 +114,8 @@ const Home = () => {
           projectTitle: project.title,
         }))
       )
-      .filter(({ reminder }) => isReminderDue(reminder, now));
+      .filter(({ reminder }) => isReminderDue(reminder, now))
+      .sort((a, b) => toTimestamp(b.reminder) - toTimestamp(a.reminder));
   }, [projects, now]);
 
   const normalizeUrl = (rawUrl) => {

@@ -50,7 +50,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .brand {
@@ -103,6 +103,26 @@ body {
 .sidebar-list {
   display: grid;
   gap: 8px;
+}
+
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sidebar-projects {
+  flex: 3;
+}
+
+.sidebar-reminders {
+  flex: 3;
+}
+
+.sidebar-scroll {
+  overflow-y: auto;
+  padding-right: 4px;
+  min-height: 0;
 }
 
 .sidebar-item {
@@ -180,6 +200,11 @@ body {
   font-weight: 600;
   display: inline-block;
   margin-left: 6px;
+}
+
+.reminder-note {
+  resize: vertical;
+  max-height: 160px;
 }
 
 .sidebar-item.active {
