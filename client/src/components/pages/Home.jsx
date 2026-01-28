@@ -32,6 +32,7 @@ const Home = () => {
   const [dragHiddenProjectId, setDragHiddenProjectId] = useState(null);
   const [now, setNow] = useState(() => new Date());
   const [reminderModalState, setReminderModalState] = useState(null);
+  const [showScheduled, setShowScheduled] = useState(false);
   const cardRefs = useRef(new Map());
   const prevPositions = useRef(new Map());
   const didDropRef = useRef(false);
@@ -116,6 +117,23 @@ const Home = () => {
       )
       .filter(({ reminder }) => isReminderDue(reminder, now))
       .sort((a, b) => toTimestamp(b.reminder) - toTimestamp(a.reminder));
+  }, [projects, now]);
+
+  const scheduledReminders = useMemo(() => {
+    const toTimestamp = (reminder) =>
+      parseReminderDate(reminder?.dueAt)?.getTime() ||
+      parseReminderDate(reminder?.createdAt)?.getTime() ||
+      0;
+    return projects
+      .flatMap((project) =>
+        (project.reminders || []).map((reminder) => ({
+          reminder,
+          projectId: project._id,
+          projectTitle: project.title,
+        }))
+      )
+      .filter(({ reminder }) => !isReminderDue(reminder, now) && !reminder?.dismissedAt)
+      .sort((a, b) => toTimestamp(a.reminder) - toTimestamp(b.reminder));
   }, [projects, now]);
 
   const normalizeUrl = (rawUrl) => {
@@ -395,13 +413,22 @@ const Home = () => {
   return (
     <>
       <div className="layout">
-      <aside className="sidebar">
-        <Brand subtitle="Project hub" />
+        <aside className="sidebar">
+          <Brand subtitle="Project hub" />
 
-        <div>
-          <div className="section-title">Reminders</div>
+          <div>
+          <div className="section-header">
+            <div className="section-title">Reminders</div>
+            <button
+              className="button ghost small"
+              type="button"
+              onClick={() => setShowScheduled((prev) => !prev)}
+            >
+              {showScheduled ? "Hide Scheduled" : "Show Scheduled"}
+            </button>
+          </div>
           <div className="sidebar-list">
-            {dueReminders.length === 0 && (
+            {dueReminders.length === 0 && !showScheduled && (
               <div className="sidebar-reminder">No reminders yet.</div>
             )}
             {dueReminders.map((entry, idx) => {
@@ -428,6 +455,28 @@ const Home = () => {
                 </div>
               );
             })}
+            {showScheduled && scheduledReminders.length === 0 && (
+              <div className="sidebar-reminder">No scheduled reminders.</div>
+            )}
+            {showScheduled &&
+              scheduledReminders.map((entry, idx) => {
+                const reminderId = getReminderId(
+                  entry.reminder,
+                  `scheduled-${entry.projectId}-${idx}`
+                );
+                return (
+                  <div className="sidebar-item reminder-item reminder-scheduled" key={reminderId}>
+                    <div className="reminder-content">
+                      <div className="reminder-title">
+                        {formatReminderTitle(entry.reminder, entry.projectTitle)}
+                      </div>
+                      <div className="reminder-meta">
+                        Scheduled • {formatReminderDueAt(entry.reminder)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
           </div>
         </div>
       </aside>
@@ -556,8 +605,8 @@ const Home = () => {
         navigate(`/project/${reminderModalState.projectId}`, {
           state: { resourceId: reminderModalState.reminder?.resourceId },
         });
-      }}
-    />
+        }}
+      />
     </>
   );
 };

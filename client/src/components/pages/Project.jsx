@@ -115,6 +115,7 @@ const Project = () => {
     error: "",
   });
   const [reminderModalState, setReminderModalState] = useState(null);
+  const [showScheduled, setShowScheduled] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [draggingProjectId, setDraggingProjectId] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
@@ -506,6 +507,23 @@ const Project = () => {
       .sort((a, b) => toTimestamp(b.reminder) - toTimestamp(a.reminder));
   }, [projects, now]);
 
+  const scheduledReminders = useMemo(() => {
+    const toTimestamp = (reminder) =>
+      parseReminderDate(reminder?.dueAt)?.getTime() ||
+      parseReminderDate(reminder?.createdAt)?.getTime() ||
+      0;
+    return projects
+      .flatMap((item) =>
+        (item.reminders || []).map((reminder) => ({
+          reminder,
+          projectId: item._id,
+          projectTitle: item.title,
+        }))
+      )
+      .filter(({ reminder }) => !isReminderDue(reminder, now) && !reminder?.dismissedAt)
+      .sort((a, b) => toTimestamp(a.reminder) - toTimestamp(b.reminder));
+  }, [projects, now]);
+
   const orderedResources = useMemo(
     () => applyResourceOrder(projectId, project?.resources || []),
     [projectId, project?.resources]
@@ -866,6 +884,11 @@ const Project = () => {
 
   const handleConfirmReminder = () => {
     if (!projectId || !selectedResource) return;
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {
+        // ignore permission errors
+      });
+    }
     let dueDate = null;
     if (reminderCreateState.mode === "exact") {
       dueDate = new Date(reminderCreateState.exactTime);
@@ -1347,9 +1370,18 @@ const Project = () => {
         </div>
 
         <div className="sidebar-section sidebar-reminders">
-          <div className="section-title">Reminders</div>
+          <div className="section-header">
+            <div className="section-title">Reminders</div>
+            <button
+              className="button ghost small"
+              type="button"
+              onClick={() => setShowScheduled((prev) => !prev)}
+            >
+              {showScheduled ? "Hide Scheduled" : "Show Scheduled"}
+            </button>
+          </div>
           <div className="sidebar-list sidebar-scroll">
-            {dueReminders.length === 0 && (
+            {dueReminders.length === 0 && !showScheduled && (
               <div className="sidebar-reminder">No reminders yet.</div>
             )}
             {dueReminders.map((entry, idx) => {
@@ -1379,6 +1411,28 @@ const Project = () => {
                 </div>
               );
             })}
+            {showScheduled && scheduledReminders.length === 0 && (
+              <div className="sidebar-reminder">No scheduled reminders.</div>
+            )}
+            {showScheduled &&
+              scheduledReminders.map((entry, idx) => {
+                const reminderId = getReminderId(
+                  entry.reminder,
+                  `scheduled-${entry.projectId}-${idx}`
+                );
+                return (
+                  <div className="sidebar-item reminder-item reminder-scheduled" key={reminderId}>
+                    <div className="reminder-content">
+                      <div className="reminder-title">
+                        {formatReminderTitle(entry.reminder, entry.projectTitle)}
+                      </div>
+                      <div className="reminder-meta">
+                        Scheduled • {formatReminderDueAt(entry.reminder)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
           </div>
         </div>
       </aside>
@@ -1600,16 +1654,16 @@ const Project = () => {
                     >
                       Open Link
                     </button>
-                    <button
-                      className="button"
-                      type="button"
-                      onClick={openReminderCreate}
-                    >
-                      Set Reminder
-                    </button>
-                  </div>
-                </>
-              )}
+                <button
+                  className="button"
+                  type="button"
+                  onClick={openReminderCreate}
+                >
+                  Set Reminder
+                </button>
+              </div>
+            </>
+          )}
               {activeDetail === "tab" && !selectedTab && (
                 <div className="empty-state">Select a tab.</div>
               )}
