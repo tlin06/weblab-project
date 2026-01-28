@@ -1,4 +1,11 @@
-import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { get, post } from "../../utilities";
 import { UserContext } from "../App";
@@ -9,6 +16,11 @@ import ResourcePanel from "../modules/ResourcePanel";
 import TabPanel from "../modules/TabPanel";
 import AuthControls from "../modules/AuthControls";
 import ConfirmModal from "../modules/ConfirmModal";
+import {
+  applyProjectOrder,
+  removeProjectOrder,
+  reorderProjectOrder,
+} from "../modules/projectOrder";
 
 const Project = () => {
   const { projectId } = useParams();
@@ -44,6 +56,18 @@ const Project = () => {
   const [tabSaveStatus, setTabSaveStatus] = useState("");
   const tabStatusTimer = useRef(null);
   const [confirmState, setConfirmState] = useState(null);
+  const [draggingProjectId, setDraggingProjectId] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+  const [dragPlaceholderHeight, setDragPlaceholderHeight] = useState(null);
+  const [dragHiddenProjectId, setDragHiddenProjectId] = useState(null);
+  const sidebarRefs = useRef(new Map());
+  const prevSidebarPositions = useRef(new Map());
+  const didDropRef = useRef(false);
+  const dragOverRaf = useRef(null);
+  const pendingDragOverIndex = useRef(null);
+  const dragOverIndexRef = useRef(null);
+  const orderedIdsRef = useRef([]);
+  const dragHiddenRaf = useRef(null);
 
   useEffect(() => {
     if (!authReady) return;
@@ -51,8 +75,85 @@ const Project = () => {
       setProjects([]);
       return;
     }
-    get("/api/projects").then((data) => setProjects(data));
+    get("/api/projects").then((data) => setProjects(applyProjectOrder(data)));
   }, [user, authReady]);
+
+  const placeholderId = "__placeholder__";
+  const renderProjects = useMemo(() => {
+    if (!draggingProjectId || dragOverIndex === null) {
+      return projects;
+    }
+    const orderedIds = orderedIdsRef.current;
+    const beforeId = orderedIds[dragOverIndex] || null;
+    let insertIndex = beforeId
+      ? projects.findIndex((project) => String(project._id) === String(beforeId))
+      : projects.length;
+    if (insertIndex === -1) insertIndex = projects.length;
+    const withPlaceholder = [...projects];
+    withPlaceholder.splice(insertIndex, 0, {
+      _id: placeholderId,
+      __placeholder: true,
+    });
+    return withPlaceholder;
+  }, [projects, draggingProjectId, dragOverIndex]);
+
+  useLayoutEffect(() => {
+    const nextPositions = new Map();
+    sidebarRefs.current.forEach((node, id) => {
+      if (!node) return;
+      nextPositions.set(id, node.getBoundingClientRect());
+    });
+    prevSidebarPositions.current.forEach((prevRect, id) => {
+      const nextRect = nextPositions.get(id);
+      if (!prevRect || !nextRect) return;
+      const dx = prevRect.left - nextRect.left;
+      const dy = prevRect.top - nextRect.top;
+      if (dx || dy) {
+        const node = sidebarRefs.current.get(id);
+        if (!node) return;
+        node.style.transform = `translate(${dx}px, ${dy}px)`;
+        node.style.transition = "transform 0s";
+        requestAnimationFrame(() => {
+          node.style.transform = "";
+          node.style.transition = "";
+        });
+      }
+    });
+    prevSidebarPositions.current = nextPositions;
+  }, [renderProjects]);
+
+  useEffect(() => {
+    dragOverIndexRef.current = dragOverIndex;
+  }, [dragOverIndex]);
+
+  const getInsertionIndex = (clientX, clientY) => {
+    const items = [];
+    projects.forEach((project) => {
+      const id = String(project._id);
+      if (id === String(draggingProjectId)) return;
+      const node = sidebarRefs.current.get(id);
+      if (!node) return;
+      const rect = node.getBoundingClientRect();
+      if (!rect.width && !rect.height) return;
+      items.push({ id, rect });
+    });
+    items.sort((a, b) => a.rect.top - b.rect.top);
+    orderedIdsRef.current = items.map((item) => item.id);
+    const buffer = 10;
+    for (let i = 0; i < items.length; i += 1) {
+      const rect = items[i].rect;
+      const midY = rect.top + rect.height / 2;
+      const hysteresisZone = Math.max(buffer, rect.height * 0.25);
+      if (clientY < midY - hysteresisZone) return i;
+      if (
+        Math.abs(clientY - midY) <= hysteresisZone &&
+        dragOverIndexRef.current !== null
+      ) {
+        return dragOverIndexRef.current;
+      }
+    }
+    return items.length;
+  };
 
   useEffect(() => {
     if (!authReady) return;
@@ -106,10 +207,137 @@ const Project = () => {
       onConfirm: () => {
         post(`/api/projects/${projectId}/delete`).then(() => {
           setProjects((prev) => prev.filter((item) => item._id !== projectId));
+          removeProjectOrder(projectId);
           navigate("/");
         });
       },
     });
+  };
+
+  const handleDragStart = (projectId) => (event) => {
+    setDraggingProjectId(String(projectId));
+    didDropRef.current = false;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", String(projectId));
+    const height = event.currentTarget.getBoundingClientRect().height;
+    setDragPlaceholderHeight(height);
+    if (dragHiddenRaf.current) {
+      cancelAnimationFrame(dragHiddenRaf.current);
+    }
+    dragHiddenRaf.current = requestAnimationFrame(() => {
+      setDragHiddenProjectId(String(projectId));
+      dragHiddenRaf.current = null;
+    });
+  };
+
+  const queueDragOver = (nextIndex) => {
+    if (nextIndex === null || Number.isNaN(nextIndex)) return;
+    if (
+      pendingDragOverIndex.current === nextIndex &&
+      dragOverIndexRef.current === nextIndex
+    ) {
+      return;
+    }
+    pendingDragOverIndex.current = nextIndex;
+    if (dragOverRaf.current) return;
+    dragOverRaf.current = requestAnimationFrame(() => {
+      dragOverRaf.current = null;
+      const index = pendingDragOverIndex.current;
+      if (index !== dragOverIndexRef.current) {
+        setDragOverIndex(index);
+      }
+    });
+  };
+
+  const handleDragOver = (event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    const nextIndex = getInsertionIndex(event.clientX, event.clientY);
+    queueDragOver(nextIndex);
+  };
+
+  const handleDrop = (targetProjectId) => (event) => {
+    event.preventDefault();
+    const sourceId = event.dataTransfer.getData("text/plain") || draggingProjectId;
+    const fromId = String(sourceId);
+    const orderedIds = orderedIdsRef.current;
+    const beforeId =
+      dragOverIndex !== null && dragOverIndex < orderedIds.length
+        ? orderedIds[dragOverIndex]
+        : null;
+    let insertIndex = beforeId
+      ? projects.findIndex((project) => String(project._id) === String(beforeId))
+      : projects.length;
+    if (insertIndex === -1) insertIndex = projects.length;
+    if (!fromId) {
+      setDraggingProjectId(null);
+      setDragOverIndex(null);
+      setDragPlaceholderHeight(null);
+      setDragHiddenProjectId(null);
+      pendingDragOverIndex.current = null;
+      if (dragOverRaf.current) {
+        cancelAnimationFrame(dragOverRaf.current);
+        dragOverRaf.current = null;
+      }
+      if (dragHiddenRaf.current) {
+        cancelAnimationFrame(dragHiddenRaf.current);
+        dragHiddenRaf.current = null;
+      }
+      return;
+    }
+    didDropRef.current = true;
+    setProjects((prev) => {
+      const next = [...prev];
+      const fromIndex = next.findIndex((project) => String(project._id) === fromId);
+      if (fromIndex === -1) return prev;
+      const [moved] = next.splice(fromIndex, 1);
+      let targetIndex = insertIndex;
+      if (fromIndex < targetIndex) targetIndex -= 1;
+      targetIndex = Math.max(0, Math.min(next.length, targetIndex));
+      next.splice(targetIndex, 0, moved);
+      reorderProjectOrder(next.map((project) => project._id));
+      return next;
+    });
+    setDraggingProjectId(null);
+    setDragOverIndex(null);
+    setDragPlaceholderHeight(null);
+    setDragHiddenProjectId(null);
+    pendingDragOverIndex.current = null;
+    if (dragOverRaf.current) {
+      cancelAnimationFrame(dragOverRaf.current);
+      dragOverRaf.current = null;
+    }
+    if (dragHiddenRaf.current) {
+      cancelAnimationFrame(dragHiddenRaf.current);
+      dragHiddenRaf.current = null;
+    }
+  };
+
+  const handleDragEnd = () => {
+    if (!didDropRef.current) {
+      setDragOverIndex(null);
+    }
+    setDraggingProjectId(null);
+    setDragOverIndex(null);
+    setDragPlaceholderHeight(null);
+    setDragHiddenProjectId(null);
+    pendingDragOverIndex.current = null;
+    if (dragOverRaf.current) {
+      cancelAnimationFrame(dragOverRaf.current);
+      dragOverRaf.current = null;
+    }
+    if (dragHiddenRaf.current) {
+      cancelAnimationFrame(dragHiddenRaf.current);
+      dragHiddenRaf.current = null;
+    }
+  };
+
+  const setSidebarRef = (id) => (node) => {
+    if (!node) {
+      sidebarRefs.current.delete(String(id));
+      return;
+    }
+    sidebarRefs.current.set(String(id), node);
   };
 
   const selectedResource = useMemo(() => {
@@ -383,17 +611,42 @@ const Project = () => {
 
         <div>
           <div className="section-title">Projects</div>
-          <div className="sidebar-list">
-            {projects.map((item) => (
-              <button
-                type="button"
-                key={item._id}
-                className={`sidebar-item ${item._id === projectId ? "active" : ""}`}
-                onClick={() => navigate(`/project/${item._id}`)}
-              >
-                {item.title}
-              </button>
-            ))}
+          <div className="sidebar-list" onDragOver={handleDragOver} onDrop={handleDrop(null)}>
+            {renderProjects.map((item) => {
+              if (item.__placeholder) {
+                return (
+                  <div
+                    key={placeholderId}
+                    className="sidebar-item drag-placeholder"
+                    style={dragPlaceholderHeight ? { height: dragPlaceholderHeight } : undefined}
+                  />
+                );
+              }
+              const isDragging = draggingProjectId === String(item._id);
+              const isDragOver = dragOverIndex === projects.indexOf(item);
+              const isDragHidden = dragHiddenProjectId === String(item._id);
+              return (
+                <button
+                  type="button"
+                  key={item._id}
+                  ref={setSidebarRef(item._id)}
+                  className={`sidebar-item ${item._id === projectId ? "active" : ""} ${
+                    isDragging ? "dragging" : ""
+                  } ${isDragHidden ? "drag-hidden" : ""} ${
+                    isDragOver ? "drag-over" : ""
+                  }`}
+                  draggable
+                  data-project-id={item._id}
+                  onDragStart={handleDragStart(item._id)}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop(item._id)}
+                  onDragEnd={handleDragEnd}
+                  onClick={() => navigate(`/project/${item._id}`)}
+                >
+                  {item.title}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -414,7 +667,7 @@ const Project = () => {
 
       <main className="main">
         <header className="topbar">
-          <div>
+          <div className="topbar-info">
             {isEditingProject ? (
               <div className="project-edit">
                 <input
@@ -435,7 +688,7 @@ const Project = () => {
             ) : (
               <>
                 <div className="topbar-title">{project?.title || "Project"}</div>
-                <div className="sidebar-reminder">{project?.description}</div>
+                <div className="topbar-description">{project?.description}</div>
               </>
             )}
           </div>
